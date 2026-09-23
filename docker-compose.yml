@@ -1,5 +1,7 @@
-version: '3.9'
-
+# Infraestrutura local do backoffice-api: só o banco PRÓPRIO dele.
+#
+# Porta 5433 de propósito: o Postgres do `allva-api` costuma estar na 5432, e os
+# dois bancos são independentes (históricos de migração separados).
 services:
   postgres:
     image: postgres:15
@@ -12,13 +14,6 @@ services:
       POSTGRES_PASSWORD: allva_backoffice_password
     volumes:
       - backoffice_postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-
-  redis:
-    image: redis:alpine
-    container_name: allva-backoffice-redis
-    ports:
-      - '6380:6379'
     restart: unless-stopped
 
 volumes:

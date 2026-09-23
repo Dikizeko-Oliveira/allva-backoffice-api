@@ -3,6 +3,12 @@ generator client {
   output   = "../generated/prisma"
 }
 
+// Banco PRÓPRIO do backoffice-api — nunca o `allva_db` do produto. Os dois têm
+// históricos de migração independentes, e dividir a `_prisma_migrations` faria
+// o `migrate dev` de um repositório pedir reset por causa do outro.
+//
+// Toda referência ao produto (ticket, operador, lead, contrato) é id opaco,
+// sem FK: o dado mora no `allva-api` e chega por HTTP.
 datasource db {
   provider = "postgresql"
 }
@@ -32,7 +38,12 @@ model SlaPolicy {
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
 
-  @@unique([priority, category, active])
+  // Uma política ATIVA por escopo (prioridade + categoria, com NULL contando
+  // como "toda categoria"). O Prisma não expressa índice parcial nem sobre
+  // expressão, então `sla_policies_one_active_per_scope` vive só na migration.
+  // Um `@@unique([priority, category, active])` aqui deixaria passar duas
+  // genéricas ativas (NULL é distinto de NULL) e barraria duas inativas.
+  @@index([priority, active])
   @@map("sla_policies")
 }
 
@@ -42,7 +53,8 @@ model TicketSlaSnapshot {
   category                String?
   status                  String
   assigneeId              String?   @map("assignee_id")
-  createdAt               DateTime  @map("created_at")
+  /// Quando o chamado foi aberto no produto — não quando esta linha nasceu.
+  openedAt                DateTime  @map("opened_at")
   lastMessageAt           DateTime  @map("last_message_at")
   lastMessageKind         String?   @map("last_message_kind")
   dueFirstResponseAt      DateTime? @map("due_first_response_at")
@@ -56,6 +68,7 @@ model TicketSlaSnapshot {
 
   @@index([status])
   @@index([assigneeId])
+  @@index([openedAt])
   @@index([dueFirstResponseAt])
   @@index([dueResolutionAt])
   @@map("ticket_sla_snapshots")

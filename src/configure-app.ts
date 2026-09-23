@@ -35,9 +35,9 @@ export function configureApp(app: NestExpressApplication): void {
   /**
    * The API sits behind a proxy/load-balancer (and, for browser traffic, behind
    * the Next BFF). This setting is what lets express derive the real client IP
-   * from X-Forwarded-For, which the security audit trail and the per-IP throttle
-   * both key on — so it is a trust boundary, not a formality. Configure
-   * TRUSTED_PROXIES with the balancer's addresses in production.
+   * from X-Forwarded-For, which the audit trail records — so it is a trust
+   * boundary, not a formality. Configure TRUSTED_PROXIES with the balancer's
+   * addresses in production.
    */
   app.set('trust proxy', parseTrustProxySetting(process.env.TRUSTED_PROXIES));
 
@@ -106,12 +106,9 @@ function setupCors(app: NestExpressApplication) {
     allowedHeaders: [
       'Content-Type',
       'Authorization',
-      'X-Organization-Id',
       // O BFF propaga a correlação para cá; sem o header liberado, a cadeia
-      // recomeça na API e o clique que a originou some do grafo (§5.6.2).
+      // recomeça na API e o clique que a originou some do grafo.
       'X-Correlation-Id',
-      // Idempotência de escrita em plataforma (§7.0.3, A2-S7).
-      'Idempotency-Key',
     ],
     exposedHeaders: [CORRELATION_ID_HEADER],
     optionsSuccessStatus: 204,

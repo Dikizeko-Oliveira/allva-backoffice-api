@@ -3,11 +3,10 @@ import eslint from '@eslint/js';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
-import allva from './eslint-rules/index.js';
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs', 'eslint-rules/**'],
+    ignores: ['eslint.config.mjs'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -42,20 +41,6 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-    },
-  },
-  {
-    // P6 — a diferença de plataforma vive no gateway e no `PlatformProfile`,
-    // nunca num `if` espalhado pelo domínio (harness de A2-S0, achado D8).
-    // Mesmo veredito é cobrado por `test/architecture/platform-conditional.spec.ts`,
-    // que roda no gate bloqueante de `pnpm test` — o lint do CI ainda é
-    // `continue-on-error`, então esta entrada aqui é a ergonomia (erro no
-    // editor), não o gate.
-    files: ['src/**/*.ts'],
-    ignores: ['**/infrastructure/providers/**', '**/*.spec.ts'],
-    plugins: { allva },
-    rules: {
-      'allva/no-platform-conditional': 'error',
     },
   },
   {

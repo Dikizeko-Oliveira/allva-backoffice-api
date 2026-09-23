@@ -153,7 +153,7 @@ três fontes (a primeira linha é identidade; as outras duas, pendências):
 | Nome, papel, permissões | `allva-api` — `GET /api/v1/auth/me` | **Existe** |
 | Pendências do produto ("3 faturas vencidas", "2 integrações com erro") | `allva-api` — `GET /api/v1/admin/attention` | **Existe** |
 | Números do Dashboard | `allva-api` — `GET /api/v1/admin/overview` | **Existe** |
-| Pendências do processo interno ("4 chamados com SLA estourado") | `allva-backoffice-api` — `GET /hub/attention` | **A criar** (§3.2) |
+| Pendências do processo interno ("4 chamados com SLA estourado") | `allva-backoffice-api` — `GET /api/v1/hub/attention` | **A criar** (§3.2) |
 | Quais áreas e itens aparecem | registro de navegação do backoffice-web | É da web (§7) |
 
 ### 3.1 O que o `allva-api` já devolve em `GET /api/v1/admin/attention`
@@ -200,7 +200,7 @@ navegação, e é da web. O item de menu "Faturas" exige `billing:read`; o sinal
 contador cai. Se a API devolvesse "Billing & Finance", mover um item de área
 exigiria deploy do backend.
 
-### 3.2 O que o `allva-backoffice-api` precisa devolver em `GET /hub/attention`
+### 3.2 O que o `allva-backoffice-api` precisa devolver em `GET /api/v1/hub/attention`
 
 **Exatamente o mesmo formato** do §3.1, com chaves próprias, para a web
 concatenar as duas listas sem tratar caso a caso. Mesmas regras: filtrar por
@@ -229,7 +229,7 @@ SLA estourado"). Chave desconhecida para a web é ignorada, não quebra a tela.
 
 ### 3.3 Onde o hub **não** deve ser composto
 
-Não criar no backoffice-api um `GET /hub` que chame o `allva-api` e devolva
+Não criar no backoffice-api um `GET /api/v1/hub` que chame o `allva-api` e devolva
 tudo junto. A tentação é "uma chamada só para a web", mas o custo é que uma
 lentidão no `allva-api` vira lentidão do backoffice-api inteiro, e os dois
 passam a cair juntos. A web (via BFF do Next) faz as duas chamadas em
@@ -256,14 +256,14 @@ mensagens, o status, a prioridade, a categoria e o **responsável atual**
    `to_operator_id`, `actor_id`, `reason` (obrigatório em reatribuição, opcional
    na primeira atribuição), `created_at`. Gravado **pelo backoffice-api**
    quando ele mesmo intermedia a reatribuição:
-   `POST /support/tickets/:ticketId/assignment` (`support:manage`) →
+   `POST /api/v1/support/tickets/:ticketId/assignment` (`support:manage`) →
    chama o `PATCH` do `allva-api` → se `200`, grava o evento. Se o `allva-api`
    recusar, nada é gravado. Se a gravação local falhar depois do `200`,
    registrar e reconciliar (a atribuição real é a do `allva-api`).
 2. **Política de SLA.** Tabela `sla_policies`: por `priority` (e
    opcionalmente `category`), `first_response_minutes`,
    `resolution_minutes`, `business_hours` (boolean), `active`. CRUD em
-   `/support/sla-policies` — leitura `support:read`, escrita
+   `/api/v1/support/sla-policies` — leitura `support:read`, escrita
    `settings:manage` (política é configuração, não atendimento).
 3. **Cálculo de prazo.** Para cada chamado aberto:
    `due_first_response_at` e `due_resolution_at`, a partir de `created_at`,
@@ -273,7 +273,7 @@ mensagens, o status, a prioridade, a categoria e o **responsável atual**
 4. **Escalonamento.** Regra por tempo em aberto: ao estourar o SLA, o chamado
    é marcado `escalated_at`, `escalated_to` (operador ou grupo) e gera alerta
    (C4). Job periódico (a cada 5 min) no backoffice-api.
-5. **Fila de trabalho.** `GET /support/queue` (`support:read`): a lista do
+5. **Fila de trabalho.** `GET /api/v1/support/queue` (`support:read`): a lista do
    `allva-api` enriquecida com prazo, estado de SLA (`ON_TRACK`, `AT_RISK`,
    `BREACHED`) e escalonamento, ordenada por risco. Paginação igual à do
    `allva-api` (`page`, `pageSize`, `{ items, total, page, pageSize }`).
@@ -286,7 +286,7 @@ justificar — é a mudança certa, mas não é pré-requisito.
 
 ### 4.2 C5 — Métricas de atendimento
 
-Derivadas de C1, não do produto. `GET /support/metrics?from=&to=&operatorId=`
+Derivadas de C1, não do produto. `GET /api/v1/support/metrics?from=&to=&operatorId=`
 (`support:read`; filtrar por outro operador exige `support:manage`):
 
 - tempo até a primeira resposta (mediana e p90);
@@ -310,8 +310,8 @@ separa de um campo em `organizations`.
 - Tabela `internal_notes`: `id`, `subject_type` (`ORGANIZATION` | `ACCOUNT` |
   `SALES_LEAD` | `CONTRACT`), `subject_id`, `author_id`, `body`,
   `pinned`, `created_at`, `edited_at`, `deleted_at`.
-- `GET /notes?subjectType=&subjectId=` e `POST /notes`, `PATCH /notes/:id`,
-  `DELETE /notes/:id` (soft delete; só o autor ou quem tem `settings:manage`).
+- `GET /api/v1/notes?subjectType=&subjectId=` e `POST /api/v1/notes`, `PATCH /api/v1/notes/:id`,
+  `DELETE /api/v1/notes/:id` (soft delete; só o autor ou quem tem `settings:manage`).
 - **Permissão segue o assunto:** ler nota de organização exige `orgs:read`;
   de lead, `leads:read`; de contrato, `billing:read`. Escrever exige a mesma
   permissão de leitura — anotar não altera o cliente. Isso impede que o
@@ -328,11 +328,11 @@ Estado de interface, sem valor para o produto.
 - `operator_preferences` (1 por operador): `last_workspace` (o hub pode
   destacar a área usada por último — sem redirecionar: todo mundo passa pelo
   hub), `sidebar_collapsed`, `density`, `timezone`.
-  `GET/PUT /me/preferences`. Sem permissão além de ser operador.
+  `GET/PUT /api/v1/me/preferences`. Sem permissão além de ser operador.
 - `saved_views`: `id`, `operator_id`, `screen` (`organizations`, `leads`,
   `support`…), `name`, `filters` (JSON), `columns`, `sort`, `is_default`,
   `shared` (visível para outros operadores com a permissão de leitura da
-  tela). `GET/POST/PATCH/DELETE /views?screen=`.
+  tela). `GET/POST/PATCH/DELETE /api/v1/views?screen=`.
 - Ao aplicar uma visão, a tela só usa filtros que a API de destino aceita;
   o backoffice-api não valida filtro de tela alheia, só guarda.
 - Uma visão compartilhada de uma tela cuja permissão o operador perdeu some
@@ -351,7 +351,7 @@ O `allva-api` produz o fato (o sinal do §3.1, o job que falhou); decidir
 - Job que lê os dois `attention` a cada N minutos **com uma credencial de
   serviço** (§6) e dispara pelas regras. Deduplicar: mesmo alerta aberto não
   dispara de novo até ser reconhecido ou o sinal zerar.
-- `POST /alerts/:id/acknowledge` exige a `required_permission` da regra.
+- `POST /api/v1/alerts/:id/acknowledge` exige a `required_permission` da regra.
 
 ### 4.6 C6 — Minuta e termos pré-assinatura
 
@@ -400,7 +400,7 @@ minuta) grava em `backoffice_audit_logs`: `actor_id`, `action`,
 `subject_type`, `subject_id`, `before`, `after`, `reason`, `ip`,
 `user_agent`, `created_at`. Nunca apagar.
 
-`GET /audit-logs` (`audit:read`) com os mesmos filtros que o `allva-api`
+`GET /api/v1/audit-logs` (`audit:read`) com os mesmos filtros que o `allva-api`
 terá em B8 (ator, organização, faixa de tempo, ação), no mesmo formato de
 item, para a área **Governance** mostrar as duas trilhas numa lista só (a web
 intercala por `created_at`).
@@ -510,7 +510,7 @@ dela.
    antes de buscar dado, com a permissão do item. `/home` exige apenas
    `platformRole !== null`, cobrado pelo portão do layout. *(Implementado.)*
 5. **Sinais.** A web chama `GET /api/v1/admin/attention` (allva-api) e
-   `GET /hub/attention` (backoffice-api) em paralelo, casa
+   `GET /api/v1/hub/attention` (backoffice-api) em paralelo, casa
    `signal.permission` com o item de navegação para achar o card, soma os
    contadores por card, e lista os sinais com `count > 0` em "Requires
    attention". `count: null` vira "indisponível" no card, nunca zero.
