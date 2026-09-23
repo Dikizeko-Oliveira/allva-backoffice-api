@@ -1,0 +1,34 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- `preferences.reviewed_at` — quando um humano salvou a tela de notificações
+--
+-- ## O defeito que isto fecha
+--
+-- A existência da linha em `preferences` não significa que alguém configurou
+-- nada: `AccountOnboardingService.ensurePreference` cria uma para **toda**
+-- conta, em todo caminho de cadastro (senha, Google, Facebook, provisionamento
+-- Enterprise), porque sem ela o e-mail com gate de preferência não alcança
+-- ninguém (M-7).
+--
+-- O checklist de primeiros passos da Central de suporte leu "linha existe"
+-- como "passo concluído" — e o passo nascia verde para todo mundo, incluindo
+-- contas criadas segundos antes. Um item de checklist que nunca está pendente
+-- não é um item de checklist.
+--
+-- ## Por que carimbo, e não comparação com os defaults
+--
+-- É o mesmo raciocínio de `organizations.name_confirmed_at`, escrito lá:
+-- quem abre a tela, confere e mantém tudo como está **configurou** — uma
+-- heurística por diferença o perguntaria para sempre. E um ajuste futuro nos
+-- defaults do schema viraria mudança de regra em silêncio, marcando ou
+-- desmarcando o passo de quem nunca tocou em nada.
+--
+-- ## Retroativo: por que nulo para todo mundo
+--
+-- Nulo em toda linha existente afirma o que de fato se sabe — nada registrou
+-- essas escolhas até agora. Carimbar `created_at` nas linhas antigas seria
+-- inventar um ato que pode nunca ter acontecido, e o custo de errar para este
+-- lado é um item de checklist a mais para quem já o cumpriu; para o outro
+-- lado, é o defeito que esta migração fecha.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE "preferences" ADD COLUMN "reviewed_at" TIMESTAMP(3);

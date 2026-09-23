@@ -1,0 +1,36 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- A taxa de câmbio, carimbada junto do custo
+--
+-- ## O defeito
+--
+-- `MODEL_PRICES_USD` é declarada em dólar e a conversão para moeda-base
+-- acontece na borda, com `AI_USD_TO_BASE_RATE` — uma variável de ambiente, hoje
+-- 5,5. `cost_base` guardava só o resultado.
+--
+-- O efeito é que o custo histórico é irreconstituível: um lançamento de
+-- R$ 0,0016 não diz se usou 5,5 ou 6,2. E no dia em que alguém atualizar a
+-- env, todo o passado passa a ser lido com a taxa nova — que não foi a que
+-- produziu o número. A conciliação com a fatura do fornecedor vira arqueologia
+-- de deploy.
+--
+-- ## Por que não ligar ao módulo `currency`
+--
+-- `model-pricing.ts` já registra a razão e ela continua valendo: `fx_rates`
+-- existe para dinheiro de plataforma, onde a **data** do câmbio é o ponto —
+-- converter na leitura faria o desperdício histórico variar todo dia sem nada
+-- ter acontecido (M2). Custo de IA é fatura de fornecedor na moeda do contrato,
+-- sem passado a reescrever. E sem `fx_rates` populado, amarrá-lo lá deixaria o
+-- custo sempre nulo e o teto diário inerte — que é justamente o que acabou de
+-- ser consertado.
+--
+-- A correção certa é menor: guardar a taxa que foi usada.
+--
+-- ## Sem backfill, de propósito
+--
+-- As linhas antigas ficam nulas. Preenchê-las com 5,5 afirmaria que aquela foi
+-- a taxa vigente na época, e é exatamente o que ninguém sabe — é a pergunta que
+-- esta coluna existe para responder daqui em diante. Nulo diz "não registrado",
+-- que é a verdade.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE "ai_decision_logs" ADD COLUMN "usd_to_base_rate" DECIMAL(18,8);

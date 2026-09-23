@@ -1,0 +1,11 @@
+-- Um quarto desfecho para uma chamada de IA que não aconteceu.
+--
+-- `SKIPPED_BUDGET` já registrava "a organização estourou o teto do dia". Com o
+-- plano passando a governar o enriquecimento, existe um segundo motivo para não
+-- chamar — "este plano não inclui narrativas" — e ele não é um estouro de teto.
+--
+-- Registrar os dois sob o mesmo código faria a análise de custo contar como
+-- limite atingido o que nunca foi tentado, e faria quem investiga "por que
+-- sumiu a narrativa?" procurar um orçamento que nunca foi excedido. É a mesma
+-- razão pela qual `SKIPPED_BUDGET` existe em vez de simplesmente não gravar nada.
+ALTER TYPE "AiCallOutcome" ADD VALUE IF NOT EXISTS 'SKIPPED_PLAN';

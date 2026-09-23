@@ -1,0 +1,112 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Um deploy em andamento nunca é cancelado por outro push: cancelar no meio
+# poderia deixar a migration aplicada e o serviço ainda na revisão antiga (ou
+# pior, a imagem trocada sem a migration ter rodado). Um push novo espera.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # necessário para o Workload Identity Federation trocar o OIDC token do GitHub por credenciais do GCP
+
+env:
+  PROJECT_ID: allva-staging
+  REGION: southamerica-east1
+  SERVICE: allva-backend
+  IMAGE: southamerica-east1-docker.pkg.dev/allva-staging/allva/backend
+  RUNTIME_SERVICE_ACCOUNT: allva-backend@allva-staging.iam.gserviceaccount.com
+  CLOUDSQL_INSTANCE: allva-staging:southamerica-east1:allva-postgres-staging
+  MIGRATE_JOB: allva-backend-migrate
+  # DATABASE_URL do Secret Manager resolve pro IP privado do Cloud SQL
+  # (não pelo socket /cloudsql/...), então quem alcança o banco é a interface
+  # de rede direta na VPC — mesma config já usada pelo serviço web. Sem isso o
+  # Job nem chega a resolver o host (P1001), muito menos autenticar.
+  VPC_NETWORK: default
+  VPC_SUBNET: default
+  VPC_EGRESS: private-ranges-only
+
+jobs:
+  deploy:
+    name: Build, migrate & deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build image
+        run: |
+          docker build \
+            -t ${{ env.IMAGE }}:${{ github.sha }} \
+            -t ${{ env.IMAGE }}:latest \
+            .
+
+      - name: Push image
+        run: |
+          docker push ${{ env.IMAGE }}:${{ github.sha }}
+          docker push ${{ env.IMAGE }}:latest
+
+      # Job separado do serviço web de propósito: roda "prisma migrate deploy"
+      # numa única execução, isolada do boot da aplicação. Se a migration
+      # falhar, o passo seguinte (deploy do serviço) nunca roda — nenhuma
+      # instância nova sobe esperando um schema que não existe.
+      # DATABASE_URL vem do Secret Manager, igual ao serviço web — a SA
+      # allva-backend já tem secretAccessor sobre ele (senão o serviço em si
+      # não subiria). Sem isso, o Job precisaria de um GitHub secret extra só
+      # para replicar uma credencial que já existe no GCP.
+      - name: Create/update migration job
+        run: |
+          gcloud run jobs deploy ${{ env.MIGRATE_JOB }} \
+            --quiet \
+            --project ${{ env.PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --image ${{ env.IMAGE }}:${{ github.sha }} \
+            --service-account ${{ env.RUNTIME_SERVICE_ACCOUNT }} \
+            --network ${{ env.VPC_NETWORK }} \
+            --subnet ${{ env.VPC_SUBNET }} \
+            --vpc-egress ${{ env.VPC_EGRESS }} \
+            --set-secrets DATABASE_URL=DATABASE_URL:latest \
+            --command pnpm \
+            --args prisma,migrate,deploy \
+            --max-retries 0 \
+            --task-timeout 600
+
+      # Sem retry automático (--max-retries 0 acima): uma migration que falhou
+      # fica marcada como failed no histórico do Prisma, e rodar de novo sem
+      # intervenção manual (prisma migrate resolve) só repete a falha.
+      - name: Run migrations
+        run: |
+          gcloud run jobs execute ${{ env.MIGRATE_JOB }} \
+            --project ${{ env.PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --wait
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --quiet \
+            --project ${{ env.PROJECT_ID }} \
+            --image ${{ env.IMAGE }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --service-account ${{ env.RUNTIME_SERVICE_ACCOUNT }} \
+            --add-cloudsql-instances ${{ env.CLOUDSQL_INSTANCE }} \
+            --port 8080 \
+            --allow-unauthenticated

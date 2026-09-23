@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ALLVA API</title>
+
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+  </head>
+
+  <body>
+    <script id="api-reference" data-url="/docs-json"></script>
+    <script>
+      var configuration = {
+        hideClientButton: false,
+        showSidebar: true,
+        showDeveloperTools: 'localhost',
+        showToolbar: 'localhost',
+        operationTitleSource: 'summary',
+        theme: 'purple',
+        // theme: 'bluePlanet',
+        persistAuth: false,
+        telemetry: false,
+        layout: 'modern',
+        isEditable: false,
+        isLoading: false,
+        hideModels: true,
+        documentDownloadType: 'both',
+        hideTestRequestButton: false,
+        hideSearch: false,
+        showOperationId: false,
+        hideDarkModeToggle: true,
+        withDefaultFonts: true,
+        defaultOpenAllTags: false,
+        expandAllModelSections: false,
+        expandAllResponses: false,
+        orderSchemaPropertiesBy: 'alpha',
+        orderRequiredPropertiesFirst: true,
+        _integration: 'html',
+        default: false,
+        slug: 'allva-api',
+        title: 'Allva API',
+      };
+
+      document.getElementById('api-reference').dataset.configuration =
+        JSON.stringify(configuration);
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+  </body>
+</html>

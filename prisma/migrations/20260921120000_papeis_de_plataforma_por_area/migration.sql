@@ -1,0 +1,42 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Papéis de plataforma por área: ADNEXA_SUPPORT, ADNEXA_FINANCE, ADNEXA_SALES
+--
+-- ## Por que só agora, e por que por último
+--
+-- Até aqui `PlatformRoleService.assertOperator` era binário: ADMIN e OPERATOR
+-- entravam em tudo. Acrescentar papéis a esse array — a ordem ingênua — daria
+-- ao suporte e ao comercial, em silêncio, poder de emitir fatura e cancelar
+-- contrato nos 22 call sites. Nenhum teste falharia.
+--
+-- Esta migração vem **depois** de todo call site passar a exigir uma
+-- permissão específica (`accounts/domain/platform-rbac.ts`). Por isso os três
+-- valores nascem deny-by-default: um papel só alcança o que a matriz lhe dá,
+-- e nada mais.
+--
+-- ## Aditiva
+--
+-- Valor novo no enum, nenhuma linha muda. `IF NOT EXISTS` pelo mesmo motivo de
+-- `20260803090000_verification_unverified_write`: reaplicar não quebra.
+--
+-- ## O que muda para quem já é ADNEXA_OPERATOR — leia antes do deploy
+--
+-- **Nenhuma linha é migrada, e isso é uma decisão.** ADNEXA_OPERATOR deixa de
+-- ser "tudo menos nada" e passa a ser a faixa de operações (sincronização,
+-- integrações, trilha de auditoria). Quem hoje é OPERATOR e trabalha com
+-- contrato, fatura, lead ou atendimento **perde esse acesso no deploy** até
+-- ser reclassificado.
+--
+-- Promover todos a ADNEXA_ADMIN preservaria o acesso — e daria a cada um,
+-- sem ninguém decidir, o poder de conceder papel de plataforma, que é a única
+-- permissão que se auto-multiplica. Perder acesso é um atrito que a pessoa
+-- relata em minutos; ganhar poder de conceder poder é algo que ninguém relata.
+-- A reclassificação é por pessoa, antes do deploy:
+--
+--   UPDATE accounts SET role = 'ADNEXA_FINANCE' WHERE email = '…';
+--
+-- ou, depois do deploy, por `PATCH /api/v1/admin/accounts/:id/platform-role`.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TYPE "ACCOUNT_ROLE_TYPE" ADD VALUE IF NOT EXISTS 'ADNEXA_SUPPORT';
+ALTER TYPE "ACCOUNT_ROLE_TYPE" ADD VALUE IF NOT EXISTS 'ADNEXA_FINANCE';
+ALTER TYPE "ACCOUNT_ROLE_TYPE" ADD VALUE IF NOT EXISTS 'ADNEXA_SALES';

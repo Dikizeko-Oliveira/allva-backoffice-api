@@ -1,0 +1,174 @@
+name: CI
+
+# PLAN.md Sprint 5.5 / P-1 — o aceite do Sprint 0 ("CI roda testes com gate de
+# cobertura") nunca foi entregue. Sem este gate a meta de cobertura do Sprint 6
+# não é verificável.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Um push novo no mesmo branch cancela a run anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck, lint & tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # `prisma.config.ts` lê DATABASE_URL do ambiente. Nenhum passo **deste**
+      # job abre conexão — os testes aqui são unitários e `prisma generate` só
+      # precisa da URL para validar o formato. Valor descartável de propósito;
+      # o job `integration` abaixo é que tem banco de verdade.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+      # As quatro abaixo são críticas em `env.ts` (zod não-opcional): sem elas
+      # `EnvModule` derruba o boot do Nest, e qualquer spec que monte o
+      # AppModule (ex.: application-graph.spec.ts) falha antes do teste em si.
+      # Valores descartáveis — nenhum aqui abre conexão real ou assina nada
+      # que saia deste job.
+      JWT_SECRET_KEY: ci-only-dummy-jwt-secret-key-not-a-real-value-32
+      REDIS_URL: redis://localhost:6379
+      FRONTEND_URL: http://localhost:3000
+      INTEGRATION_TOKEN_ENCRYPTION_KEY: ci-only-dummy-token-encryption-key-32
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Lê a versão do campo `packageManager` do package.json.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # O postinstall já roda isso, mas mantemos explícito: um install com
+      # `--ignore-scripts` deixaria `generated/prisma` faltando e o tsc quebraria
+      # com um erro que não aponta para a causa.
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Ainda não bloqueante, mas o passivo caiu de 583 para 105 erros
+      # (2026-07-26). O que sobra está concentrado em dois arquivos que leem
+      # payload de API externa — `stripe.service.ts` e `google-ads.provider.ts`
+      # —, onde as respostas não vêm tipadas pelos SDKs. Vira bloqueante
+      # (`continue-on-error: false`) quando esses dois forem tipados.
+      - name: Lint (non-blocking)
+        run: pnpm lint:ci
+        continue-on-error: true
+
+      # O gate de cobertura vive em `jest.config.js` (coverageThreshold), não
+      # aqui, para que `pnpm test:cov` local falhe pelos mesmos limites que o CI.
+      - name: Tests with coverage gate
+        run: pnpm test:cov
+
+      # Roda mesmo quando o gate falha: o número que reprovou é justamente o que
+      # o revisor precisa ver sem abrir o log.
+      - name: Coverage summary
+        if: always()
+        run: node scripts/ci/coverage-summary.js >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # A2-S9 — **os testes que tocam banco existiam e nunca rodaram aqui.**
+  #
+  # Seis specs de `test/integration/` e `schema-gates-db.spec.ts` pulam em
+  # silêncio quando `DATABASE_URL` não abre conexão — comportamento correto para
+  # a máquina de quem não subiu o compose, e desastroso como estado permanente do
+  # CI: o gate de P8, a invariante de `organization_ads_settings` e os três gates
+  # de schema que exigem catálogo ficavam verdes por ausência.
+  #
+  # Job **separado** do `verify` de propósito. O caminho quente — typecheck,
+  # lint, unitários — não passa a depender de dois containers subirem, e uma
+  # falha de infraestrutura aqui não fica indistinguível de código quebrado lá.
+  # ───────────────────────────────────────────────────────────────────────────
+  integration:
+    name: Integração (banco e fila reais)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: allva_ci
+          POSTGRES_USER: allva_ci
+          POSTGRES_PASSWORD: allva_ci
+        ports:
+          - 5432:5432
+        # Sem o healthcheck, o primeiro passo que conecta corre contra um
+        # Postgres que ainda está inicializando — e a falha é intermitente, que
+        # é a pior classe de falha de CI que existe.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://allva_ci:allva_ci@localhost:5432/allva_ci?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: '6379'
+      # Mesmo motivo do job `verify`: críticas em `env.ts`, sem elas o boot do
+      # Nest falha antes de qualquer teste de integração rodar.
+      JWT_SECRET_KEY: ci-only-dummy-jwt-secret-key-not-a-real-value-32
+      REDIS_URL: redis://localhost:6379
+      FRONTEND_URL: http://localhost:3000
+      INTEGRATION_TOKEN_ENCRYPTION_KEY: ci-only-dummy-token-encryption-key-32
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+
+      # `migrate deploy`, nunca `db push`: é o mesmo caminho da produção, e é o
+      # que faz o CI verificar que o histórico de migrações aplica num banco
+      # limpo — a garantia que A2-S1 declarou e que só um banco vazio prova.
+      - name: Apply migrations
+        run: pnpm prisma migrate deploy
+
+      # **Sem `--passWithNoTests`, e sem tolerar skip.** Um teste de integração
+      # que pula por falta de banco é o defeito que este job existe para
+      # eliminar; se ele pular aqui, o job tem de falhar.
+      - name: Integration and database-backed gates
+        run: pnpm test:integration

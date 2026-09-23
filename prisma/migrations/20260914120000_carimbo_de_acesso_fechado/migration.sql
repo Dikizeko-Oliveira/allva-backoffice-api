@@ -1,0 +1,21 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- `organizations.access_closed_at` — a âncora da janela de sync diário
+--
+-- ## O defeito que isto fecha
+--
+-- Nenhum job olhava se a organização ainda tinha acesso. Assinatura vencida,
+-- contrato suspenso e organização excluída seguiam com ingest de hora em hora,
+-- scoring, detecção de desperdício e resumo com IA. E como plano irresolúvel
+-- cai no intervalo de 1h, a organização que parou de pagar sincronizava mais
+-- vezes que um cliente STARTER em dia.
+--
+-- ## O que muda
+--
+-- Com acesso fechado, a organização recebe só a varredura completa diária por
+-- 48h, e depois nada. A decisão de acesso continua sendo do resolver, na
+-- leitura; esta coluna só registra quando a varredura observou o fechamento,
+-- porque nada no banco guarda esse instante. Nula para toda organização
+-- existente: a primeira varredura carimba quem estiver fechado.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE "organizations" ADD COLUMN "access_closed_at" TIMESTAMP(3);
