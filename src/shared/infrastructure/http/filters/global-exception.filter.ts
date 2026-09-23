@@ -7,12 +7,6 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { NotAllowedError } from '@/shared/domain/errors/not-allowed-error';
-import { ResourceNotFoundError } from '@/shared/domain/errors/resource-not-found-error';
-import {
-  DomainError,
-  renderDomainError,
-} from '@/shared/infrastructure/http/errors/domain-error';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -23,16 +17,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const context = host.switchToHttp();
     const response = context.getResponse<Response>();
     const request = context.getRequest<Request>();
-
-    // O `DomainErrorFilter` normalmente atende estes primeiro (§7.0.4). Repetir
-    // a renderização aqui — pela mesma função pura — garante que um erro de
-    // domínio nunca saia no formato legado só porque a ordem de registro dos
-    // filtros globais mudou.
-    if (exception instanceof DomainError) {
-      const { status, body } = renderDomainError(exception);
-      response.status(status).json(body);
-      return;
-    }
 
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
@@ -75,14 +59,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   }
 
   private mapDomainError(exception: unknown) {
-    if (exception instanceof NotAllowedError) {
-      return { status: HttpStatus.FORBIDDEN, message: exception.message };
-    }
-
-    if (exception instanceof ResourceNotFoundError) {
-      return { status: HttpStatus.NOT_FOUND, message: exception.message };
-    }
-
     if (exception instanceof Error) {
       return {
         status: HttpStatus.INTERNAL_SERVER_ERROR,

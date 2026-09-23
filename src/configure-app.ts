@@ -1,5 +1,4 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
@@ -7,8 +6,6 @@ import { join } from 'path';
 
 import { CORRELATION_ID_HEADER } from './shared/infrastructure/context/correlation-id.middleware';
 import { parseTrustProxySetting } from './shared/infrastructure/http/client-ip';
-import { ResponseEnvelopeInterceptor } from './shared/infrastructure/http/envelope/response-envelope.interceptor';
-import { DomainErrorFilter } from './shared/infrastructure/http/errors/domain-error.filter';
 import { GlobalExceptionFilter } from './shared/infrastructure/http/filters/global-exception.filter';
 
 // Swagger UI / scalar serve inline scripts+styles, so the strict API CSP is
@@ -48,30 +45,11 @@ export function configureApp(app: NestExpressApplication): void {
   setupCors(app);
   setupStaticAssets(app);
   setupValidation(app);
-  setupResponseEnvelope(app);
   setupExceptionFilter(app);
 }
 
-function setupResponseEnvelope(app: NestExpressApplication) {
-  // Envelope `{ data, meta }` de §7.0.1. Só age sobre rotas que optaram por ele
-  // — a superfície ads-first —, então nenhuma resposta existente muda de forma.
-  //
-  // A ordem importa: o primeiro registrado é o mais externo, então
-  // `SignedStorageUrlInterceptor` vê a carga **já envelopada** e assina tanto o
-  // que está dentro de `data` quanto o que fica fora dele. Invertido, ele
-  // enxergaria só o valor cru do handler e deixaria passar qualquer URL que o
-  // envelope viesse a acrescentar.
-  app.useGlobalInterceptors(
-    new ResponseEnvelopeInterceptor(app.get(Reflector)),
-  );
-}
-
 function setupExceptionFilter(app: NestExpressApplication) {
-  // Os filtros globais são avaliados na ordem inversa da registração: o último
-  // registrado é o primeiro consultado. `DomainErrorFilter` vem depois para que
-  // um `DomainError` não caia no catch-all. Se essa ordem se perder, o
-  // `GlobalExceptionFilter` ainda renderiza `DomainError` no formato de §7.0.4.
-  app.useGlobalFilters(new GlobalExceptionFilter(), new DomainErrorFilter());
+  app.useGlobalFilters(new GlobalExceptionFilter());
 }
 
 function setupSecurityHeaders(app: NestExpressApplication) {

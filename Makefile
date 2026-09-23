@@ -1,8 +1,7 @@
-# Makefile for Allva API
+# Makefile for Allva Backoffice API
 
 # Variables
-NPM := npm
-NPX := npx
+PNPM := pnpm
 
 # Default target
 .DEFAULT_GOAL := help
@@ -16,31 +15,31 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install dependencies
-	$(NPM) install
+	$(PNPM) install
 
 dev: ## Start the application in development mode
-	$(NPM) run dev
+	$(PNPM) dev
 
 build: ## Build the application
-	$(NPM) run build
+	$(PNPM) build
 
 start: ## Start the application in production mode
-	$(NPM) run start:prod
+	$(PNPM) start:prod
 
 
 # Prisma Commands
 prisma-generate: ## Generate Prisma client
-	$(NPX) prisma generate
+	$(PNPM) prisma generate
 
 prisma-migrate: ## Run Prisma migrations in development (creates migration files)
-	$(NPX) prisma migrate dev
+	$(PNPM) prisma migrate dev
 
 deploy: ## Apply pending migrations to the database (fixes 'prisma deploy' issue)
-	$(NPX) prisma migrate deploy
-	$(NPX) prisma generate
+	$(PNPM) prisma migrate deploy
+	$(PNPM) prisma generate
 
 prisma-studio: ## Open Prisma Studio
-	$(NPX) prisma studio
+	$(PNPM) prisma studio
 
 
 # Docker Commands
