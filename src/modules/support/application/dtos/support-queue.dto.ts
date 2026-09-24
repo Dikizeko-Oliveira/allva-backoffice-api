@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { SLA_STATES, type SlaState } from 'src/modules/support/domain/sla';
 import { PageQueryDto } from 'src/shared/infrastructure/http/pagination/page-query.dto';
 
@@ -47,6 +47,19 @@ export class ListSupportQueueQueryDto extends PageQueryDto {
   @IsString()
   @MaxLength(100)
   assignee?: string;
+
+  @ApiProperty({
+    required: false,
+    enum: SLA_STATES,
+    description:
+      'Filtra pelo estado de SLA que o backoffice-api calcula — o produto não ' +
+      'tem esse conceito. Com este filtro, a paginação deixa de vir do ' +
+      '`allva-api` e passa a ser feita aqui (ver `ListSupportQueueUseCase`); ' +
+      '`page`/`pageSize` continuam valendo, só que sobre o conjunto já filtrado.',
+  })
+  @IsOptional()
+  @IsIn(SLA_STATES)
+  sla?: SlaState;
 }
 
 export class SupportTicketSlaDto {
@@ -96,7 +109,9 @@ export class ListSupportQueueOutputDto {
   @ApiProperty({
     type: [SupportTicketOutputDto],
     description:
-      'Ordenados por risco de SLA dentro da página: estourado, em risco, no prazo.',
+      'Sem `sla`: ordenados por risco dentro da página (estourado, em risco, ' +
+      'no prazo), na ordem do produto dentro de cada risco. Com `sla`: todos no ' +
+      'mesmo estado, ordenados pelo prazo pendente mais próximo.',
   })
   items: SupportTicketOutputDto[];
 
