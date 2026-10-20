@@ -215,7 +215,8 @@ There is no `$transaction` usage today. A write that spans this database and `al
 
 ## 24. Deployment
 
-- `deploy.yml` **MUST** stay `workflow_dispatch` only until the own GCP resources exist.
+- `deploy.yml` runs on push to `main` and `workflow_dispatch`. Its targets **MUST** be the backoffice's own resources (`allva-backoffice-api` service, `allva-backoffice-api-migrate` job, `allva/backoffice-api` image); it **MUST NOT** name the product's `allva-backend`.
+- GCP resources are created with `scripts/gcp/provision.sh`, not by hand; a change to what the deploy needs updates the script too.
 - Service and migrate job **MUST** use `BACKOFFICE_*` secrets, never the product's.
 
 ---

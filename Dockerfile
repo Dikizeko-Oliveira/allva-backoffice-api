@@ -29,9 +29,14 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=8081
+# Fora do `$HOME` do root: o processo roda como `node` (ver `USER` abaixo), e o
+# Job de migração chama `pnpm`. Com o cache no root, o corepack tentaria baixar
+# o pnpm de novo em runtime — sem permissão, e sem rede garantida.
+ENV COREPACK_HOME=/opt/corepack
 
 # pnpm
-RUN corepack enable && corepack prepare pnpm@8.15.5 --activate
+RUN corepack enable && corepack prepare pnpm@8.15.5 --activate \
+  && chmod -R a+rX /opt/corepack
 
 # Apenas dependências de produção
 COPY package.json pnpm-lock.yaml ./
@@ -54,5 +59,11 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
 
 EXPOSE 8081
+
+# Sem root em runtime. A aplicação não grava em disco; `/app` passa ao usuário
+# `node` mesmo assim porque o motor de migração do Prisma, rodado pelo Job com
+# esta mesma imagem, pode querer escrever ao lado de `prisma/`.
+RUN chown -R node:node /app
+USER node
 
 CMD ["node", "dist/src/main.js"]

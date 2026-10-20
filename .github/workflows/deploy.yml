@@ -1,22 +1,23 @@
 name: Deploy
 
-# **Só manual até a infraestrutura própria existir.**
+# Mesma automação do `allva-api`: push em `main` (ou disparo manual) →
+# build da imagem → migrations num Cloud Run Job → deploy do serviço no Cloud Run.
 #
-# Este arquivo veio copiado do `allva-api` apontando para o serviço
-# `allva-backend`, a imagem `allva/backend` e o secret `DATABASE_URL` do produto:
-# o primeiro push em `main` teria **substituído o backend do produto** pela
-# imagem do backoffice e rodado as migrações daqui no banco do cliente.
+# Os recursos do GCP que este fluxo usa (service account, secrets, banco próprio,
+# confiança do Workload Identity Federation neste repositório) são criados uma
+# única vez por `scripts/gcp/provision.sh`. Tudo aqui é do backoffice: nenhum
+# nome, imagem ou secret é compartilhado com o produto (`allva-backend`).
 #
-# Antes de religar o gatilho de push, criar no GCP (projeto allva-staging):
-#   - serviço Cloud Run `allva-backoffice-api` e job `allva-backoffice-api-migrate`
-#   - service account `allva-backoffice-api@…` com secretAccessor nos dois secrets
-#   - secret `BACKOFFICE_DATABASE_URL` (banco próprio, não o `allva-postgres`)
-#   - secret `BACKOFFICE_ALLVA_API_URL` (URL interna do allva-api)
+# Sem domínio próprio: a URL que o Cloud Run gera (`*.run.app`) é a URL oficial.
+# Ela é impressa no resumo da run.
 on:
+  push:
+    branches: [main]
   workflow_dispatch: {}
 
-# Um deploy em andamento nunca é cancelado por outro: cancelar no meio poderia
-# deixar a migration aplicada e o serviço ainda na revisão antiga.
+# Um deploy em andamento nunca é cancelado por outro push: cancelar no meio
+# poderia deixar a migration aplicada e o serviço ainda na revisão antiga (ou
+# pior, a imagem trocada sem a migration ter rodado). Um push novo espera.
 concurrency:
   group: deploy-backoffice-api
   cancel-in-progress: false
@@ -32,6 +33,10 @@ env:
   IMAGE: southamerica-east1-docker.pkg.dev/allva-staging/allva/backoffice-api
   RUNTIME_SERVICE_ACCOUNT: allva-backoffice-api@allva-staging.iam.gserviceaccount.com
   MIGRATE_JOB: allva-backoffice-api-migrate
+  # `BACKOFFICE_DATABASE_URL` aponta para o IP privado do Cloud SQL (não para o
+  # socket /cloudsql/...), então quem alcança o banco é a interface de rede
+  # direta na VPC — a mesma configuração do `allva-api`. Sem isso o Job nem
+  # resolve o host (P1001), muito menos autentica.
   VPC_NETWORK: default
   VPC_SUBNET: default
   VPC_EGRESS: private-ranges-only
@@ -44,6 +49,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # Falhar aqui, com a causa escrita, em vez de dois passos depois com um
+      # erro de autenticação do google-github-actions que não aponta para o
+      # secret que falta (ex.: um repositório novo ainda sem os secrets).
+      - name: Check required GitHub secrets
+        env:
+          GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+          GCP_DEPLOY_SERVICE_ACCOUNT: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+        run: |
+          missing=0
+          for name in GCP_WIF_PROVIDER GCP_DEPLOY_SERVICE_ACCOUNT; do
+            if [ -z "${!name}" ]; then
+              echo "::error::GitHub secret $name não está configurado neste repositório (ver scripts/gcp/provision.sh)."
+              missing=1
+            fi
+          done
+          exit "$missing"
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
@@ -68,8 +90,12 @@ jobs:
           docker push ${{ env.IMAGE }}:${{ github.sha }}
           docker push ${{ env.IMAGE }}:latest
 
-      # Job separado do serviço: se a migration falhar, o deploy não roda e
-      # nenhuma instância sobe esperando um schema que não existe.
+      # Job separado do serviço de propósito: roda `prisma migrate deploy` numa
+      # única execução, isolada do boot da aplicação. Se a migration falhar, o
+      # passo seguinte (deploy do serviço) nunca roda — nenhuma instância nova
+      # sobe esperando um schema que não existe.
+      # DATABASE_URL vem do Secret Manager (BACKOFFICE_DATABASE_URL), igual ao
+      # serviço: a service account do backoffice já tem secretAccessor sobre ele.
       - name: Create/update migration job
         run: |
           gcloud run jobs deploy ${{ env.MIGRATE_JOB }} \
@@ -87,6 +113,9 @@ jobs:
             --max-retries 0 \
             --task-timeout 600
 
+      # Sem retry automático (--max-retries 0 acima): uma migration que falhou
+      # fica marcada como failed no histórico do Prisma, e rodar de novo sem
+      # intervenção manual (`prisma migrate resolve`) só repete a falha.
       - name: Run migrations
         run: |
           gcloud run jobs execute ${{ env.MIGRATE_JOB }} \
@@ -108,3 +137,32 @@ jobs:
             --set-secrets DATABASE_URL=BACKOFFICE_DATABASE_URL:latest,ALLVA_API_URL=BACKOFFICE_ALLVA_API_URL:latest \
             --port 8081 \
             --allow-unauthenticated
+
+      # A sonda só olha o banco próprio (ver `HealthController`): `allva-api`
+      # fora do ar não reprova um deploy do backoffice. Uma revisão que sobe mas
+      # não alcança o banco reprova aqui, em vez de ficar verde e quebrada.
+      - name: Smoke test
+        run: |
+          url="$(gcloud run services describe ${{ env.SERVICE }} \
+            --project ${{ env.PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --format 'value(status.url)')"
+
+          {
+            echo "### Backoffice API"
+            echo ""
+            echo "- URL: ${url}"
+            echo "- Revisão: \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for attempt in 1 2 3 4 5 6; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "${url}/api/v1/health" || true)"
+            echo "GET ${url}/api/v1/health → ${code} (tentativa ${attempt}/6)"
+            if [ "$code" = "200" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "::error::${url}/api/v1/health não respondeu 200 após o deploy."
+          exit 1

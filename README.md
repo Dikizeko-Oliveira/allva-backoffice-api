@@ -64,6 +64,24 @@ pnpm build
 pnpm test
 ```
 
+## Deploy
+
+Push em `main` publica no Google Cloud Run (`.github/workflows/deploy.yml`): build da
+imagem → migrations num Cloud Run Job → deploy do serviço `allva-backoffice-api` →
+teste de fumaça em `/api/v1/health`. Não há domínio próprio: a URL `*.run.app` que o
+Cloud Run gera aparece no resumo de cada run.
+
+Os recursos do GCP (service account, banco próprio, secrets, confiança do Workload
+Identity Federation neste repositório) são criados uma vez com:
+
+```bash
+gcloud auth login
+./scripts/gcp/provision.sh
+```
+
+O script é idempotente e, ao final, imprime os dois `gh secret set` que faltam no
+GitHub (`GCP_WIF_PROVIDER` e `GCP_DEPLOY_SERVICE_ACCOUNT`, os mesmos valores do `allva-api`).
+
 ## Estrutura
 
 Mesma arquitetura limpa do `allva-api`:
