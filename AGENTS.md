@@ -175,7 +175,7 @@ Full list with reasons: [`docs/MEMORY.md`](./docs/MEMORY.md) §16–18. The ones
 - Per-operator rate limit on write routes.
 - Metrics: median/p90 and resolved/reopened volumes return `null`.
 - Assignment reconciliation (spec §4.1.1): if the local event write fails after `allva-api` accepted the assignment, the use case throws; nothing reconciles `[VERIFY]`.
-- Signature-provider webhook for drafts. Deploy workflow is **manual only** until own GCP infra exists.
+- Signature-provider webhook for drafts.
 
 ---
 
@@ -332,7 +332,7 @@ Needs verification:
 - introduce destructive migrations without justification;
 - guess third-party (including `allva-api`) behaviour;
 - expose secrets, log tokens or hardcode credentials;
-- re-enable the deploy `push` trigger before the own GCP infrastructure exists;
+- point `deploy.yml` at `allva-backend`, `allva/backend` or the product's `DATABASE_URL` — every deploy target is the backoffice's own (`allva-backoffice-api`, `BACKOFFICE_*` secrets);
 - present planned functionality (§7.3) as implemented;
 - mark work complete when requirements remain unfinished;
 - modify unrelated parts of the project without a clear reason;

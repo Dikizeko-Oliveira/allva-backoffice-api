@@ -57,7 +57,7 @@ Eight layered modules + `health` (flat). Detail in [ARCHITECTURE.md](./ARCHITECT
 
 ## 5. Technology Stack
 
-NestJS 11 · TypeScript 5.9 · Prisma 7.3 (`prisma-client` generator → `generated/prisma`, `@prisma/adapter-pg`) · PostgreSQL 15 · zod 4 (env) · class-validator · helmet · Swagger + Scalar · Jest 29 · pnpm 8.15.5 · Node 22 · Docker · GCP Cloud Run (manual deploy).
+NestJS 11 · TypeScript 5.9 · Prisma 7.3 (`prisma-client` generator → `generated/prisma`, `@prisma/adapter-pg`) · PostgreSQL 15 · zod 4 (env) · class-validator · helmet · Swagger + Scalar · Jest 29 · pnpm 8.15.5 · Node 22 · Docker · GCP Cloud Run (deploy on push to `main`).
 
 ---
 
@@ -126,7 +126,11 @@ NestJS 11 · TypeScript 5.9 · Prisma 7.3 (`prisma-client` generator → `genera
 
 - `[DECISION]` **Own database**, separate migration history. Sharing `_prisma_migrations` with the product would make `migrate dev` in one repo ask for a reset because of the other.
 - `[DECISION]` CI applies migrations with `migrate deploy` (never `db push`) to a clean Postgres and fails if `prisma migrate diff` finds drift.
-- `[DECISION]` **Deploy is manual only** (`workflow_dispatch`). `deploy.yml` was copied from `allva-api` pointing to the product service, image and `DATABASE_URL`: the first push to `main` would have **replaced the product backend** and run these migrations on the customer database. Re-enable `push` only after the own GCP resources exist (`allva-backoffice-api` service, migrate job, service account, `BACKOFFICE_DATABASE_URL`, `BACKOFFICE_ALLVA_API_URL`) `[VERIFY]` whether they exist now.
+- `[DECISION]` **Deploy runs on push to `main` (and `workflow_dispatch`), with everything named for the backoffice.** It was manual-only from 2026-09-23 because `deploy.yml` had been copied from `allva-api` pointing to the product service, image and `DATABASE_URL`: a push would have **replaced the product backend** and run these migrations on the customer database. The trigger came back (2026-10-20) once every target was the backoffice's own: service `allva-backoffice-api`, job `allva-backoffice-api-migrate`, image `allva/backoffice-api`, runtime SA `allva-backoffice-api@`, secrets `BACKOFFICE_DATABASE_URL` / `BACKOFFICE_ALLVA_API_URL`. **Never point any of these back at `allva-backend`, `allva/backend` or `DATABASE_URL`.**
+- `[DECISION]` GCP resources are created by `scripts/gcp/provision.sh` (idempotent; never regenerates the DB password if the secret already has a version). The database is a **separate database** (`allva_backoffice_db`, own user) on the Cloud SQL instance `allva-postgres-staging` `[VERIFY]` — a dedicated instance is the alternative if hard isolation or independent maintenance windows are wanted (`CLOUDSQL_INSTANCE=...` in the script). Reaches the instance by private IP through the VPC, like `allva-api`.
+- `[DECISION]` **No custom domain**: the Cloud Run `*.run.app` URL is the official one; the deploy prints it in the run summary and smoke-tests `GET /api/v1/health` (database only) after each deploy.
+- `[DECISION]` GitHub auth is Workload Identity Federation with the **same** deploy service account and provider as `allva-api`; this repo only needs its own copy of the secrets `GCP_WIF_PROVIDER` and `GCP_DEPLOY_SERVICE_ACCOUNT`, and the provider/SA must trust `Dikizeko-Oliveira/allva-backoffice-api`.
+- `[VERIFY]` The first migration on Cloud SQL PostgreSQL 15 runs as a non-superuser (`allva_backoffice`); if it fails with `permission denied for schema public`, grant `ALL ON SCHEMA public` on `allva_backoffice_db` to that user as `postgres`. Not yet exercised against Cloud SQL (verified locally against Postgres 15 with the production image).
 - `[DECISION]` Health checks **only the own database**. `allva-api` down fails dependent routes with an explained `503`, but is no reason to take this instance out of rotation.
 - `[DECISION]` `configureApp` lives outside `main.ts` so tests can exercise the real request pipeline (a false `500` was once reported because a harness booted `AppModule` without the guard).
 
@@ -150,6 +154,7 @@ NestJS 11 · TypeScript 5.9 · Prisma 7.3 (`prisma-client` generator → `genera
 | 2026-09-23 | `769b3b3` | Clean architecture mirroring `allva-api`; raw-SQL controllers removed; own DB; authorization in use cases; `/api/v1`; zod env; architecture gates; deploy made manual |
 | 2026-09-23 | `769b3b3` | Bugs fixed in that pass: queue erased who spoke last; `resolvedAt` changed on every read; closed ticket stayed breached forever; converted draft was editable; concurrent alert acknowledgement overwrote |
 | 2026-09-23 | `5f13e9b` | `sla` filter on the queue (the hub already linked to `/support?sla=BREACHED`) |
+| 2026-10-20 | — | Deploy on push to `main` with own GCP resources (`scripts/gcp/provision.sh`); CI builds the image; image runs as non-root; post-deploy smoke test |
 
 ---
 
@@ -167,7 +172,7 @@ NestJS 11 · TypeScript 5.9 · Prisma 7.3 (`prisma-client` generator → `genera
 10. Queue `sla` filter scans the product, not the snapshot table, until polling exists.
 11. Signed contract PDF belongs to `allva-api`.
 12. Hidden ⇒ `404`.
-13. Deploy stays manual until own infrastructure exists.
+13. Deploy targets only `BACKOFFICE_*` / `allva-backoffice-api` resources — never the product's service, image or `DATABASE_URL`.
 
 ---
 

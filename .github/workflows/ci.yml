@@ -1,5 +1,8 @@
 name: CI
 
+# Roda em todo PR e em todo push em `main` — o deploy (`deploy.yml`) dispara no
+# mesmo push, então o resultado desta run é o que valida a revisão publicada.
+
 on:
   push:
     branches: [main]
@@ -57,6 +60,21 @@ jobs:
       - name: Tests
         run: pnpm test:cov
 
+      # Roda mesmo quando os testes falham: o número que reprovou é justamente o
+      # que o revisor precisa ver sem abrir o log.
+      - name: Coverage summary
+        if: always()
+        run: node scripts/ci/coverage-summary.js >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+          if-no-files-found: ignore
+
   migrations:
     name: Migrações num banco limpo
     runs-on: ubuntu-latest
@@ -100,3 +118,18 @@ jobs:
       # quebra no deploy.
       - name: Schema matches migrations
         run: pnpm prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+  # A imagem é o que o deploy publica. Construí-la aqui faz um Dockerfile
+  # quebrado (lockfile fora de sincronia, arquivo não copiado, `prisma generate`
+  # falhando) reprovar no PR, e não depois do merge, no meio do deploy.
+  # Só constrói: não faz push nem autentica em nada.
+  docker:
+    name: Imagem Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t allva-backoffice-api:ci .
