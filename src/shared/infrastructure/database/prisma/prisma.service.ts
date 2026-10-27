@@ -5,11 +5,17 @@ import { PrismaClient } from '../../../../../generated/prisma/client';
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleDestroy {
   constructor() {
+    const databaseUrl = process.env.DATABASE_URL;
+
+    if (!databaseUrl) {
+      throw new Error('DATABASE_URL is required');
+    }
+
+    const databaseSsl = process.env.DATABASE_SSL === 'true';
+
     const adapter = new PrismaPg({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL?.includes('localhost')
-        ? undefined
-        : { rejectUnauthorized: false },
+      connectionString: databaseUrl,
+      ssl: databaseSsl ? { rejectUnauthorized: true } : false,
     });
 
     super({ adapter });
