@@ -9,7 +9,12 @@
  * uma permissão nova que o `allva-api` passe a devolver continua chegando
  * intacta em `Operator.permissions`.
  *
- * Permissão nova nasce no `allva-api` primeiro, e só depois entra aqui.
+ * Permissão nova nasce no `allva-api` primeiro, e só depois entra aqui —
+ * junto com `test/architecture/support/allva-api-platform-permissions.ts`, a
+ * cópia versionada contra a qual `platform-permissions-parity.spec.ts` compara
+ * esta lista. As quatro de `beta:*` e `usage:*` faltaram por um mês sem que
+ * nada falhasse; a nota interna e a regra de alerta restritas a elas eram
+ * recusadas com 400 pelo `@IsIn` (GAP-047).
  */
 export const PLATFORM_PERMISSIONS = [
   'dashboard:read',
@@ -36,6 +41,10 @@ export const PLATFORM_PERMISSIONS = [
   'audit:read',
   'settings:read',
   'settings:manage',
+  'beta:read',
+  'beta:manage',
+  'usage:read',
+  'usage:manage',
 ] as const;
 
 export type PlatformPermission = (typeof PLATFORM_PERMISSIONS)[number];
