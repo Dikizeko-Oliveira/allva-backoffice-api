@@ -11,6 +11,7 @@ import { SupportModule } from './modules/support/support.module';
 import { AllvaApiModule } from './shared/infrastructure/allva-api/allva-api.module';
 import { EnvModule } from './shared/infrastructure/config/env.module';
 import { CorrelationIdMiddleware } from './shared/infrastructure/context/correlation-id.middleware';
+import { AccessLogMiddleware } from './shared/infrastructure/context/access-log.middleware';
 import { RequestContextModule } from './shared/infrastructure/context/request-context.module';
 import { DatabaseModule } from './shared/infrastructure/database/database.module';
 
@@ -33,6 +34,8 @@ import { DatabaseModule } from './shared/infrastructure/database/database.module
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+    // AccessLogMiddleware logo depois: toda requisição deixa uma linha com o id
+    // que o CorrelationIdMiddleware acabou de fixar (GAP-058).
+    consumer.apply(CorrelationIdMiddleware, AccessLogMiddleware).forRoutes('*');
   }
 }

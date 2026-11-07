@@ -6,7 +6,8 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Request, Response } from 'express';
+import { Response } from 'express';
+import { RequestWithCorrelation } from 'src/shared/infrastructure/context/correlation-id.middleware';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -16,7 +17,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const context = host.switchToHttp();
     const response = context.getResponse<Response>();
-    const request = context.getRequest<Request>();
+    const request = context.getRequest<RequestWithCorrelation>();
+    const correlationId = request.correlationId;
 
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
@@ -40,8 +42,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     // Unexpected (non-domain) errors are the only place a raw exception surfaces.
     // Log them server-side with their stack so operators can diagnose 500s.
     if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
+      // Caminho, não `url`: a query nunca vai ao log. E o id da requisição,
+      // o mesmo do `allva-api`, para ligar o relato ao 500 (GAP-058).
       this.logger.error(
-        `Unhandled exception on ${request.method} ${request.url}`,
+        `Unhandled exception on ${request.method} ${request.path} correlationId=${correlationId ?? '-'}`,
         exception instanceof Error ? exception.stack : String(exception),
       );
     }
@@ -55,6 +59,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       statusCode: status,
       path: request.url,
       timestamp: new Date().toISOString(),
+      // Aditivo (GAP-058): o mesmo valor do header X-Correlation-Id.
+      ...(correlationId ? { correlationId } : {}),
     });
   }
 
