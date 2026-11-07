@@ -1,4 +1,10 @@
-name: Deploy
+name: Deploy (GCP Cloud Run — desligado)
+
+# DESLIGADO desde 2026-11-05. O projeto GCP `allva-staging` foi cancelado; a API
+# roda numa VPS atrás do Cloudflare. Fica pronto para quando o GCP voltar, mas
+# sem efeito: sem gatilho de `push`, e o job só roda com a variável de
+# repositório `GCP_DEPLOY_ENABLED=true`. Mesmo desenho do `allva-api`.
+#
 
 # Mesma automação do `allva-api`: push em `main` (ou disparo manual) →
 # build da imagem → migrations num Cloud Run Job → deploy do serviço no Cloud Run.
@@ -11,8 +17,6 @@ name: Deploy
 # Sem domínio próprio: a URL que o Cloud Run gera (`*.run.app`) é a URL oficial.
 # Ela é impressa no resumo da run.
 on:
-  push:
-    branches: [main]
   workflow_dispatch: {}
 
 # Um deploy em andamento nunca é cancelado por outro push: cancelar no meio
@@ -44,6 +48,8 @@ env:
 jobs:
   deploy:
     name: Build, migrate & deploy
+    # Trava do desligamento (ver o cabeçalho): sem a variável, o job é pulado.
+    if: ${{ vars.GCP_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 

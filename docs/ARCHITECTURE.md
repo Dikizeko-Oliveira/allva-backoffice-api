@@ -221,7 +221,7 @@ Own Postgres `allva_backoffice_db` (local: `docker-compose.yml`, port 5433). All
 
 "Enum-like" columns (`status`, `priority`, `channel`, `subject_type`, `severity`) are `String` in Postgres; the allowed values live in TypeScript (`as const` arrays) and DTOs. There are no Prisma enums and no `$transaction` usage.
 
-Prisma: generator `prisma-client` → `generated/prisma`; datasource URL comes from `prisma.config.ts` (driver adapter pattern — no `url` in the schema). `PrismaService` builds a `PrismaPg` adapter, SSL off for `localhost`, `rejectUnauthorized: false` otherwise.
+Prisma: generator `prisma-client` → `generated/prisma`; datasource URL comes from `prisma.config.ts` (driver adapter pattern — no `url` in the schema). `PrismaService` builds a `PrismaPg` adapter with SSL only when `DATABASE_SSL=true`, verifying the certificate (`rejectUnauthorized: true`).
 
 ---
 
@@ -321,7 +321,7 @@ Helmet baseline (HSTS 180 d, `no-referrer`, `nosniff`, frame deny); strict CSP (
 - `Dockerfile`: two stages on `node:22-alpine`; production stage installs prod deps, copies `prisma/` and `prisma.config.ts` (needed by `migrate deploy`), `dist/`, `public/`; port 8081.
 - The image runs as the non-root `node` user; `COREPACK_HOME=/opt/corepack` lets the migrate job call `pnpm` without downloading it at runtime.
 - CI (`.github/workflows/ci.yml`, push to `main` and PRs): `verify` = install → `prisma generate` → `typecheck` → `lint:ci` → `test:cov` (+ coverage summary and artifact); `migrations` = `migrate deploy` on a clean Postgres 15 → `migrate diff --exit-code`; `docker` = builds the image (no push).
-- Deploy (`.github/workflows/deploy.yml`, push to `main` and manual): GitHub OIDC → Workload Identity Federation → Artifact Registry (`allva/backoffice-api`) → Cloud Run Job `allva-backoffice-api-migrate` (`prisma migrate deploy`, no retry) → Cloud Run service `allva-backoffice-api` (port 8081, `--allow-unauthenticated`: authentication is the operator bearer introspected against `allva-api`) → smoke test of `GET /api/v1/health`. GCP `allva-staging`, `southamerica-east1`; secrets `BACKOFFICE_DATABASE_URL` (private IP of Cloud SQL, reached through the VPC with `private-ranges-only` egress) and `BACKOFFICE_ALLVA_API_URL`. No custom domain: the `*.run.app` URL is printed in the run summary.
+- Deploy: **production runs on a VPS behind Cloudflare** (2026-11), not versioned here `[VERIFY]`. `.github/workflows/deploy.yml` is **disabled since 2026-11-05** (no `push` trigger; the job runs only with `GCP_DEPLOY_ENABLED=true`), kept for a return to GCP. As written (manual): GitHub OIDC → Workload Identity Federation → Artifact Registry (`allva/backoffice-api`) → Cloud Run Job `allva-backoffice-api-migrate` (`prisma migrate deploy`, no retry) → Cloud Run service `allva-backoffice-api` (port 8081, `--allow-unauthenticated`: authentication is the operator bearer introspected against `allva-api`) → smoke test of `GET /api/v1/health`. GCP `allva-staging`, `southamerica-east1`; secrets `BACKOFFICE_DATABASE_URL` (private IP of Cloud SQL, reached through the VPC with `private-ranges-only` egress) and `BACKOFFICE_ALLVA_API_URL`. No custom domain: the `*.run.app` URL is printed in the run summary.
 - One-time setup of those resources: `scripts/gcp/provision.sh`. GitHub repo secrets needed: `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT` (same values as `allva-api`).
 
 ---
