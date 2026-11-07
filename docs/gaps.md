@@ -104,7 +104,7 @@
 | Categoria | Funcionalidade incompleta / Operação |
 | Severidade | **MEDIUM** |
 | Natureza | **CONFIRMADO** (`grep @Cron/@Interval/setInterval` = 0 no repositório; item herdado H-20) |
-| Status | ABERTO (parcial) — 2026-11-06 (`7e4604c`) |
+| Status | ABERTO (parcial) — 2026-11-07 (`7e4604c`, painel `allva-backoffice-web@624f92a`) |
 | Fase | BOA-2 / BOA-3 |
 
 **Descrição.** O backoffice tem políticas de SLA, regras de alerta com CRUD auditado e campos `escalatedAt`. Não há nenhum agendador no processo:
@@ -131,6 +131,19 @@
 - envio por canal e `quiet_hours`.
 
 Um chamado já observado passa de `ON_TRACK` a `BREACHED` sozinho, porque o estado é calculado contra o relógio. Um nunca observado não passa.
+
+**Atualização 2026-11-07: tela no painel (`allva-backoffice-web@624f92a`).** O sinal do hub apontava para `/operations`, que não lista alertas, e não havia onde cadastrar regra.
+
+**O que a tela faz.** `/alerts` mostra os disparos, já filtrados pela permissão de cada regra, com "Reconhecer". Quem tem `settings:read` vê as regras, cada uma marcada como "a cada 5 min" ou "não avaliada ainda"; quem tem `settings:manage` cria regras e as liga ou desliga. O hub passou a apontar para lá.
+
+**Validação:** E2E `e2e/10` contra a stack local. O admin vê disparos e regras; o suporte vê só os disparos.
+
+**Segue aberto o mesmo de antes:**
+- conta de serviço (decisão do dono);
+- escalonamento;
+- envio por canal.
+
+Criar uma regra pela tela e vê-la disparar não foi testado: grava no banco local.
 
 ---
 
@@ -187,7 +200,7 @@ Um chamado já observado passa de `ON_TRACK` a `BREACHED` sozinho, porque o esta
 | Categoria | Autorização / Consistência |
 | Severidade | **LOW** |
 | Natureza | **CONFIRMADO** (comparação dos dois catálogos, 2026-11-04) |
-| Status | **CORRIGIDO — A VALIDAR** — 2026-11-06 (`410402b`) |
+| Status | **CORRIGIDO — A VALIDAR** — 2026-11-07 (`410402b`, painel `allva-backoffice-web@46264aa`) |
 | Fase | BOA-4 |
 
 **Descrição.** O catálogo é espelhado à mão ("permissão nova nasce no `allva-api` primeiro, e só depois entra aqui"). Os programas beta (B1–B5) e o painel de custo adicionaram `beta:read`, `beta:manage`, `usage:read` e `usage:manage` no `allva-api`, e o espelho não foi atualizado. A autorização em tempo de execução não é afetada, porque a lista não filtra `Operator.permissions`. Mas `@IsIn(PLATFORM_PERMISSIONS)` nos DTOs de nota interna e de regra de alerta recusa (400) uma nota ou alerta restrito a essas permissões, e nenhum teste detecta a divergência.
@@ -197,6 +210,8 @@ Um chamado já observado passa de `ON_TRACK` a `BREACHED` sozinho, porque o esta
 **Critério de aceite.** Os dois catálogos têm as mesmas 28 permissões e um teste falha quando divergem.
 
 **Atualização 2026-11-06: corrigido em `410402b`.** As 4 permissões entraram no catálogo, que agora tem as mesmas 28 do `allva-api`. O gate `platform-permissions-parity.spec.ts` compara o catálogo com uma cópia versionada. Com o repositório irmão ao lado, ou com `ALLVA_API_DIR`, compara também essa cópia com o arquivo do `allva-api`. **Falta:** o espelho do `allva-backoffice-web`.
+
+**Atualização 2026-11-07: parte do painel em `allva-backoffice-web@46264aa`.** O painel já tinha as 28 permissões. O teste puro `e2e/09` compara o vocabulário do painel com o catálogo do `allva-api` ao lado.
 
 ---
 
@@ -298,6 +313,8 @@ Um chamado já observado passa de `ON_TRACK` a `BREACHED` sozinho, porque o esta
 **Critério de aceite.** Um chamado HIGH recém-aberto aparece `ON_TRACK` e passa a `AT_RISK` só perto do vencimento; o teste unitário de `sla.ts` cobre as quatro prioridades.
 
 **Atualização 2026-11-06: corrigido em `c87cc56`.** A janela de risco é a última quarta parte do prazo, entre 10 min e 2 h. Um HIGH novo fica no prazo e entra em risco nos últimos 30 min da primeira resposta. Um CRITICAL entra nos últimos 10 min. Os prazos longos não mudaram. A regra mora em `pendingDeadlinesOf` e `slaStateOf`, e vale igual para a fila e para o hub. O hub busca os candidatos no horizonte de 2 h e decide pela função pura. O teste cobre as quatro prioridades; o de integração cobre o HIGH novo e o que está perto do prazo.
+
+**Atualização 2026-11-07:** o texto do sinal `support.sla_at_risk` no painel dizia "nas próximas 2h" e passou a dizer "na janela de risco do SLA" (`allva-backoffice-web@624f92a`).
 
 ---
 
