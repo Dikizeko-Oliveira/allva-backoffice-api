@@ -1,4 +1,8 @@
-import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
@@ -105,7 +109,16 @@ function setupCors(app: NestExpressApplication) {
       // Outside production we stay permissive to ease local/preview work.
       if (!isProduction) return callback(null, true);
       if (allowlist.includes(origin)) return callback(null, true);
-      return callback(new Error('Origin not allowed by CORS'));
+      // Recusa com `ForbiddenException`, como o `allva-api` (GAP-049): um
+      // `Error` comum virava 500 e um ERROR no log por `Origin` forjado. E não
+      // `callback(null, false)`, que só omite os headers CORS e deixa uma
+      // requisição "simples" de origem alheia chegar ao handler.
+      return callback(
+        new ForbiddenException({
+          code: 'CORS_ORIGIN_NOT_ALLOWED',
+          message: 'Origin not allowed by CORS',
+        }),
+      );
     },
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
