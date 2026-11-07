@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import type { BackofficeAuditLogService } from 'src/modules/audit/application/backoffice-audit-log.service';
 import { Operator } from 'src/modules/auth/domain/entities';
 import type {
@@ -57,7 +61,7 @@ function build(currentAssignee: string | null) {
     audit as unknown as BackofficeAuditLogService,
   );
 
-  return { useCase, gateway, events, audit };
+  return { useCase, gateway, events, audit, tracker };
 }
 
 describe('AssignSupportTicketUseCase', () => {
@@ -112,5 +116,42 @@ describe('AssignSupportTicketUseCase', () => {
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'support.ticket.assigned' }),
     );
+  });
+
+  /**
+   * GAP-045: a atribuição já valeu no produto quando a gravação local cai. A
+   * auditoria, gravada antes, e o log com o `ticketId` são o rastro.
+   */
+  it('gravação local que cai depois do assign deixa auditoria e log', async () => {
+    const { useCase, gateway, events, audit } = build('op-2');
+    const logged = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    events.save.mockRejectedValueOnce(new Error('banco fora'));
+
+    await expect(
+      useCase.execute(operator(), 'ticket-1', {
+        toOperatorId: 'op-1',
+        reason: 'Férias',
+      }),
+    ).rejects.toThrow('banco fora');
+
+    expect(gateway.assign).toHaveBeenCalled();
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'support.ticket.assigned',
+        subjectId: 'ticket-1',
+        before: { assigneeId: 'op-2' },
+        after: { assigneeId: 'op-1' },
+        reason: 'Férias',
+      }),
+    );
+    expect(logged).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'support.assignment_local_write_failed ticketId=ticket-1 from=op-2 to=op-1',
+      ),
+      expect.any(String),
+    );
+    logged.mockRestore();
   });
 });
