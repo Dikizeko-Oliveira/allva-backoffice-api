@@ -15,10 +15,16 @@ export class AllvaApiContractsGateway extends ProductContractsGatewayInterface {
   async create(
     operator: Operator,
     terms: unknown,
+    idempotencyKey: string,
   ): Promise<{ contractId: string }> {
     const contract = await this.allvaApi.request<ApiContract>(
       '/api/v1/admin/contracts',
-      { method: 'POST', token: operator.accessToken, body: terms },
+      {
+        method: 'POST',
+        token: operator.accessToken,
+        body: terms,
+        idempotencyKey,
+      },
     );
 
     // Sem id não há como ligar a minuta ao contrato — e gravar a conversão

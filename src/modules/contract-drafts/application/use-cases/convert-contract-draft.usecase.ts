@@ -11,10 +11,29 @@ import { ContractDraftOutputDto } from '../dtos';
 import { findContractDraft } from '../find-contract-draft';
 
 /**
+ * A chave com que a minuta pede o contrato ao produto. Derivada do id, e só
+ * dele: toda tentativa de converter a mesma minuta é o mesmo pedido.
+ */
+export function contractDraftIdempotencyKey(draftId: string): string {
+  return `contract-draft:${draftId}`;
+}
+
+/**
  * Cria o contrato no `allva-api` a partir da minuta.
  *
- * Idempotente pelo lado de cá: minuta já convertida devolve o estado atual sem
- * chamar o produto de novo — um duplo clique não cria dois contratos.
+ * Idempotente nos três casos (GAP-043):
+ *
+ * - **Em série:** minuta já convertida devolve o estado atual sem chamar o
+ *   produto de novo.
+ * - **Em paralelo:** as duas conversões mandam a mesma `Idempotency-Key`, o
+ *   produto cria um contrato só e devolve o mesmo id às duas; a gravação aqui é
+ *   condicional (`saveConversion`) e só a primeira audita.
+ * - **Falha parcial:** se o contrato nasceu e a resposta não chegou, ou a
+ *   gravação local falhou, a nova tentativa recebe o mesmo `contractId`.
+ *
+ * Termos editados entre uma tentativa que criou o contrato e a seguinte dão
+ * 409 `IDEMPOTENCY_KEY_REUSED` no produto: o contrato com os termos antigos
+ * existe, e criar outro em silêncio deixaria o primeiro órfão.
  */
 @Injectable()
 export class ConvertContractDraftUseCase {
@@ -38,10 +57,17 @@ export class ConvertContractDraftUseCase {
     const { contractId } = await this.productContracts.create(
       operator,
       draft.terms,
+      contractDraftIdempotencyKey(draft.id),
     );
 
     draft.markConverted(contractId);
-    await this.draftsRepository.update(draft);
+
+    if (!(await this.draftsRepository.saveConversion(draft))) {
+      // Outra conversão gravou antes, com o mesmo contrato: ela já auditou.
+      return toContractDraftOutput(
+        await findContractDraft(this.draftsRepository, id),
+      );
+    }
 
     const after = toContractDraftOutput(draft);
 

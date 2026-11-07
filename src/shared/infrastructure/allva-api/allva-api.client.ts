@@ -19,6 +19,11 @@ export type AllvaApiRequestOptions = {
   body?: unknown;
   query?: AllvaApiQuery;
   timeoutMs?: number;
+  /**
+   * `Idempotency-Key` repassada ao produto, para escrita que precisa
+   * sobreviver a retry sem duplicar (a conversão de minuta, GAP-043).
+   */
+  idempotencyKey?: string;
 };
 
 const DEFAULT_TIMEOUT_MS = 5_000;
@@ -74,6 +79,10 @@ export class AllvaApiClient {
     if (clientIp && secret) {
       headers['x-allva-client-ip'] = clientIp;
       headers['x-allva-proxy-secret'] = secret;
+    }
+
+    if (options.idempotencyKey) {
+      headers['Idempotency-Key'] = options.idempotencyKey;
     }
 
     if (options.body !== undefined) {

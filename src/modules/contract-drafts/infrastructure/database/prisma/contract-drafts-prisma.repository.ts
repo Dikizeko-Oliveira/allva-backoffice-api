@@ -36,6 +36,14 @@ export class ContractDraftsPrismaRepository implements ContractDraftsRepositoryI
     });
   }
 
+  async saveConversion(draft: ContractDraft): Promise<boolean> {
+    const { count } = await this.prisma.contractDraft.updateMany({
+      where: { id: draft.id, contractId: null },
+      data: toData(draft),
+    });
+    return count > 0;
+  }
+
   async findById(id: string): Promise<ContractDraft | null> {
     const record = await this.prisma.contractDraft.findUnique({
       where: { id },

@@ -64,3 +64,37 @@ describe('AllvaApiClient — IP do operador (GAP-033)', () => {
     expect(headers).not.toHaveProperty('x-allva-client-ip');
   });
 });
+
+describe('AllvaApiClient — Idempotency-Key (GAP-043)', () => {
+  const realFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  async function headersFor(idempotencyKey?: string) {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 200 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const { client } = build();
+
+    await client.request('/api/v1/admin/contracts', {
+      method: 'POST',
+      token: 't',
+      body: {},
+      idempotencyKey,
+    });
+
+    return fetchMock.mock.calls[0][1].headers as Record<string, string>;
+  }
+
+  it('repassa a chave quando pedida', async () => {
+    expect((await headersFor('contract-draft:d-1'))['Idempotency-Key']).toBe(
+      'contract-draft:d-1',
+    );
+  });
+
+  it('sem chave, não inventa uma', async () => {
+    expect(await headersFor()).not.toHaveProperty('Idempotency-Key');
+  });
+});
