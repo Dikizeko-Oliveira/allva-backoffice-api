@@ -76,7 +76,7 @@ jobs:
           if-no-files-found: ignore
 
   migrations:
-    name: Migrações num banco limpo
+    name: Migrações e integração num banco limpo
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -118,6 +118,15 @@ jobs:
       # quebra no deploy.
       - name: Schema matches migrations
         run: pnpm prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+      # Os repositórios Prisma contra o banco recém-migrado (GAP-048): filtros
+      # e paginação da auditoria, conversão de minuta, alertas e as contagens
+      # do hub. O nome do banco tem "ci", que é o que a suíte exige para
+      # truncar tabelas.
+      - name: Integration tests
+        run: pnpm test:integration
+        env:
+          INTEGRATION_DATABASE_URL: postgresql://allva_backoffice_ci:allva_backoffice_ci@localhost:5432/allva_backoffice_ci?schema=public
 
   # A imagem é o que o deploy publica. Construí-la aqui faz um Dockerfile
   # quebrado (lockfile fora de sincronia, arquivo não copiado, `prisma generate`

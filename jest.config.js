@@ -12,6 +12,9 @@ module.exports = {
   rootDir: 'src',
   roots: ['<rootDir>', '<rootDir>/../test'],
   testRegex: '.*\\.spec\\.ts$',
+  // A suíte de integração precisa de Postgres e roda à parte
+  // (`pnpm test:integration`, `jest.integration.config.js`).
+  testPathIgnorePatterns: ['/node_modules/', '/test/integration/'],
   setupFiles: ['<rootDir>/../test/support/test-env.ts'],
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
