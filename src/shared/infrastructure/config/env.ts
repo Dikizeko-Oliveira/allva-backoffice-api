@@ -29,6 +29,13 @@ export const envSchema = z.object({
     .min(32, 'TRUSTED_CLIENT_IP_SECRET must be at least 32 characters')
     .optional(),
   DOCS_ENABLED: z.enum(['true', 'false']).optional(),
+  // Liga o job que avalia as regras de alerta a cada 5 min (GAP-044). Só grava
+  // `alert_events` neste banco; não envia nada para fora.
+  ALERT_EVALUATION_ENABLED: z
+    .enum(['true', 'false'])
+    .optional()
+    .default('true')
+    .transform((value) => value === 'true'),
   /**
    * Por quanto tempo a introspecção de um token vale. O teto de 60s é regra de
    * `docs/backoffice-api.md` §2: acima disso, um operador rebaixado ou com a

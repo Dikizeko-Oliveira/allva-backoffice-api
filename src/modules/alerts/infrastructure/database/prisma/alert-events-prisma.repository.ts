@@ -64,6 +64,27 @@ export class AlertEventsPrismaRepository implements AlertEventsRepositoryInterfa
     return { items: records.map(toEntity), total, ...page };
   }
 
+  async save(event: AlertEvent): Promise<void> {
+    await this.prisma.alertEvent.create({
+      data: {
+        id: event.id,
+        ruleId: event.ruleId,
+        source: event.source,
+        severity: event.severity,
+        payload: event.payload as Prisma.InputJsonValue,
+        createdAt: event.createdAt,
+      },
+    });
+  }
+
+  async hasOpenForRule(ruleId: string): Promise<boolean> {
+    const open = await this.prisma.alertEvent.findFirst({
+      where: { ruleId, acknowledgedAt: null },
+      select: { id: true },
+    });
+    return open !== null;
+  }
+
   /**
    * Condicionado a `acknowledgedAt IS NULL`: dois operadores reconhecendo ao
    * mesmo tempo não sobrescrevem um ao outro — vale o primeiro.

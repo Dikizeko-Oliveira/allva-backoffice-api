@@ -17,4 +17,10 @@ export abstract class AlertEventsRepositoryInterface {
     page: PageParams,
   ): Promise<PageResult<AlertEvent>>;
   abstract saveAcknowledgement(event: AlertEvent): Promise<void>;
+
+  /** Grava um disparo novo (GAP-044). */
+  abstract save(event: AlertEvent): Promise<void>;
+
+  /** A regra tem algum disparo ainda não reconhecido? É o que deduplica. */
+  abstract hasOpenForRule(ruleId: string): Promise<boolean>;
 }

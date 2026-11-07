@@ -25,7 +25,7 @@ export const SUPPORT_ATTENTION_SIGNALS = [
     permission: 'support:read',
     severity: 'CRITICAL',
   },
-  /** Vence nas próximas duas horas. */
+  /** Entrou na janela de risco do prazo (a última quarta parte, até 2 h). */
   {
     key: 'support.sla_at_risk',
     permission: 'support:read',

@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+
 type AlertEventProps = {
   id: string;
   ruleId: string;
@@ -14,6 +16,23 @@ type AlertEventProps = {
 /** Um disparo de uma `AlertRule`. */
 export class AlertEvent {
   private constructor(private props: AlertEventProps) {}
+
+  /** Um disparo novo, ainda não reconhecido (GAP-044). */
+  static create(
+    props: Pick<
+      AlertEventProps,
+      'ruleId' | 'requiredPermission' | 'source' | 'severity' | 'payload'
+    >,
+    now: Date = new Date(),
+  ): AlertEvent {
+    return new AlertEvent({
+      ...props,
+      id: randomUUID(),
+      acknowledgedBy: null,
+      acknowledgedAt: null,
+      createdAt: now,
+    });
+  }
 
   static restore(props: AlertEventProps): AlertEvent {
     return new AlertEvent(props);
