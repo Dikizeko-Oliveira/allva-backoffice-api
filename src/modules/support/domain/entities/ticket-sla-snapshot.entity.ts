@@ -1,6 +1,7 @@
 import {
   addMinutes,
   isLiveTicketStatus,
+  pendingDeadlinesOf,
   SlaState,
   slaStateOf,
   SlaTargets,
@@ -134,15 +135,13 @@ export class TicketSlaSnapshot {
   slaView(now: Date = new Date()): TicketSlaView {
     const { dueFirstResponseAt, dueResolutionAt, firstOperatorReplyAt } =
       this.props;
-    const live = isLiveTicketStatus(this.props.status);
 
-    const pending = [
-      live && !firstOperatorReplyAt ? dueFirstResponseAt : null,
-      live ? dueResolutionAt : null,
-    ].filter((due): due is Date => due !== null);
+    const pending = pendingDeadlinesOf(this.props);
 
     const nextDueAt =
-      [...pending].sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+      pending
+        .map(({ dueAt }) => dueAt)
+        .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
 
     return {
       state: slaStateOf(pending, now),

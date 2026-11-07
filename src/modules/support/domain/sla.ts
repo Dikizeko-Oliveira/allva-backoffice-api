@@ -6,8 +6,34 @@
 export const SLA_STATES = ['BREACHED', 'AT_RISK', 'ON_TRACK'] as const;
 export type SlaState = (typeof SLA_STATES)[number];
 
-/** Quanto antes do vencimento um chamado passa a contar como "em risco". */
-export const SLA_AT_RISK_WINDOW_MS = 2 * 60 * 60 * 1000;
+/**
+ * Quanto antes do vencimento um prazo passa a contar como "em risco": a última
+ * quarta parte do prazo, nunca menos de 10 minutos nem mais de 2 horas.
+ *
+ * Era uma janela fixa de 2 horas (GAP-059). Com ela, a primeira resposta de um
+ * HIGH (2 h) e a de um CRITICAL (30 min) nasciam "em risco": o contador do hub
+ * mostrava todo chamado urgente recém-aberto como risco, e o sinal deixava de
+ * distinguir o que está apertado do que acabou de chegar. Proporcional, um
+ * HIGH novo está no prazo e entra em risco nos últimos 30 minutos; o teto de
+ * 2 h mantém o comportamento antigo para os prazos longos (LOW, MEDIUM,
+ * resolução) e é também o horizonte máximo que a contagem do hub consulta.
+ */
+export const SLA_AT_RISK_SHARE = 0.25;
+export const SLA_AT_RISK_MIN_WINDOW_MS = 10 * 60 * 1000;
+export const SLA_AT_RISK_MAX_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+/** Um prazo ainda pendente e o instante em que ele começou a correr. */
+export type PendingDeadline = { dueAt: Date; startedAt: Date };
+
+export function slaAtRiskWindowMs(deadline: PendingDeadline): number {
+  const durationMs = deadline.dueAt.getTime() - deadline.startedAt.getTime();
+  const proportional = Math.max(0, durationMs) * SLA_AT_RISK_SHARE;
+
+  return Math.min(
+    SLA_AT_RISK_MAX_WINDOW_MS,
+    Math.max(SLA_AT_RISK_MIN_WINDOW_MS, proportional),
+  );
+}
 
 /** Status do produto em que o chamado ainda espera alguém da Allva. */
 export const LIVE_TICKET_STATUSES = ['OPEN', 'IN_PROGRESS'] as const;
@@ -68,6 +94,35 @@ export function resolveSlaTargets(
   };
 }
 
+type SnapshotDeadlines = {
+  status: string;
+  openedAt: Date;
+  dueFirstResponseAt: Date | null;
+  dueResolutionAt: Date | null;
+  firstOperatorReplyAt: Date | null;
+};
+
+/**
+ * Os prazos que ainda correm num chamado: a primeira resposta enquanto nenhum
+ * operador respondeu, a resolução enquanto o chamado está vivo. Os dois contam
+ * a partir da abertura. É a mesma regra para a fila (`slaView`) e para a
+ * contagem do hub — por isso mora aqui, e não em cada um.
+ */
+export function pendingDeadlinesOf(
+  snapshot: SnapshotDeadlines,
+): PendingDeadline[] {
+  if (!isLiveTicketStatus(snapshot.status)) return [];
+
+  const dues = [
+    snapshot.firstOperatorReplyAt ? null : snapshot.dueFirstResponseAt,
+    snapshot.dueResolutionAt,
+  ];
+
+  return dues
+    .filter((due): due is Date => due !== null)
+    .map((dueAt) => ({ dueAt, startedAt: snapshot.openedAt }));
+}
+
 export function addMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60_000);
 }
@@ -78,16 +133,17 @@ export function addMinutes(date: Date, minutes: number): Date {
  * não continua "estourado" na fila para sempre.
  */
 export function slaStateOf(
-  pendingDueDates: readonly Date[],
+  pending: readonly PendingDeadline[],
   now: Date,
 ): SlaState {
   const nowMs = now.getTime();
 
-  if (pendingDueDates.some((due) => due.getTime() < nowMs)) return 'BREACHED';
+  if (pending.some(({ dueAt }) => dueAt.getTime() < nowMs)) return 'BREACHED';
 
   if (
-    pendingDueDates.some(
-      (due) => due.getTime() <= nowMs + SLA_AT_RISK_WINDOW_MS,
+    pending.some(
+      (deadline) =>
+        deadline.dueAt.getTime() <= nowMs + slaAtRiskWindowMs(deadline),
     )
   ) {
     return 'AT_RISK';

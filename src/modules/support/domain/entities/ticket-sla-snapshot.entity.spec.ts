@@ -86,8 +86,11 @@ describe('TicketSlaSnapshot', () => {
     );
 
     // Primeira resposta venceu aos 60 min, mas foi dada aos 10: não conta.
-    // Resta a resolução (240), a menos de duas horas.
-    const view = snapshot.slaView(minutes(130));
+    // Resta a resolução (240), cuja janela de risco é a última quarta parte
+    // do prazo: a partir dos 180 min.
+    expect(snapshot.slaView(minutes(179)).state).toBe('ON_TRACK');
+
+    const view = snapshot.slaView(minutes(190));
 
     expect(view.state).toBe('AT_RISK');
     expect(view.nextDueAt).toEqual(minutes(240));

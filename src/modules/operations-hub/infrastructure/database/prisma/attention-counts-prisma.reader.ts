@@ -10,7 +10,9 @@ import {
 } from 'src/modules/operations-hub/domain/ports';
 import {
   LIVE_TICKET_STATUSES,
-  SLA_AT_RISK_WINDOW_MS,
+  pendingDeadlinesOf,
+  SLA_AT_RISK_MAX_WINDOW_MS,
+  slaStateOf,
 } from 'src/modules/support/domain/sla';
 import { PrismaService } from 'src/shared/infrastructure/database/prisma/prisma.service';
 
@@ -128,22 +130,8 @@ export class AttentionCountsPrismaReader implements AttentionCountsReaderInterfa
           where: { ...live, ...breached },
         });
 
-      case 'support.sla_at_risk': {
-        const horizon = new Date(now.getTime() + SLA_AT_RISK_WINDOW_MS);
-        return this.prisma.ticketSlaSnapshot.count({
-          where: {
-            ...live,
-            NOT: breached,
-            OR: [
-              {
-                firstOperatorReplyAt: null,
-                dueFirstResponseAt: { gte: now, lte: horizon },
-              },
-              { dueResolutionAt: { gte: now, lte: horizon } },
-            ],
-          },
-        });
-      }
+      case 'support.sla_at_risk':
+        return this.countAtRisk(live, breached, now);
 
       case 'support.escalated':
         return this.prisma.ticketSlaSnapshot.count({
@@ -164,6 +152,44 @@ export class AttentionCountsPrismaReader implements AttentionCountsReaderInterfa
           },
         });
     }
+  }
+  /**
+   * A janela de risco é proporcional ao prazo (`slaAtRiskWindowMs`), o que um
+   * `WHERE` do Prisma não expressa. O banco traz só os candidatos — vivos, não
+   * estourados, com algum prazo pendente dentro do horizonte máximo — e a regra
+   * de domínio decide, a mesma de `slaView`. O conjunto é pequeno por
+   * construção: chamados que vencem nas próximas 2 horas.
+   */
+  private async countAtRisk(
+    live: Prisma.TicketSlaSnapshotWhereInput,
+    breached: Prisma.TicketSlaSnapshotWhereInput,
+    now: Date,
+  ): Promise<number> {
+    const horizon = new Date(now.getTime() + SLA_AT_RISK_MAX_WINDOW_MS);
+    const candidates = await this.prisma.ticketSlaSnapshot.findMany({
+      where: {
+        ...live,
+        NOT: breached,
+        OR: [
+          {
+            firstOperatorReplyAt: null,
+            dueFirstResponseAt: { gte: now, lte: horizon },
+          },
+          { dueResolutionAt: { gte: now, lte: horizon } },
+        ],
+      },
+      select: {
+        status: true,
+        openedAt: true,
+        dueFirstResponseAt: true,
+        dueResolutionAt: true,
+        firstOperatorReplyAt: true,
+      },
+    });
+
+    return candidates.filter(
+      (snapshot) => slaStateOf(pendingDeadlinesOf(snapshot), now) === 'AT_RISK',
+    ).length;
   }
 }
 
