@@ -144,6 +144,8 @@ NestJS 11 · TypeScript 5.9 · Prisma 7.3 (`prisma-client` generator → `genera
 - Docs (`/docs`, `/docs-json`, `/scalar`) are off in production unless `DOCS_ENABLED=true`. Strict CSP on the JSON surface; CORS allowlist enforced only in production.
 - Validation pipe is `whitelist` + `forbidNonWhitelisted`: unknown fields are a `400 VALIDATION_ERROR`.
 
+- `[DECISION]` (2026-11-05, GAP-042) **Same dependency floor as `allva-api`, via `pnpm.overrides`** (no comments allowed in `package.json`, so the reason lives here): `multer ≥ 2.5`, `path-to-regexp ≥ 8.4`, `proxy-addr ≥ 2.0.8` (critical; it is what `req.ip`, the throttle and the audit `ip` run on), `qs ≥ 6.16`, `body-parser ≥ 2.4`, `lodash ≥ 4.18`; `@nestjs/{common,core,platform-express,testing}` on the same line as the API (11.1.29); `zod` 4.6.7. The API had these since the October security audit (SEC-03) and they never reached this repo, while both services run on the same VPS. `pnpm audit --prod`: 1 critical + 42 high → 0 critical, 30 high, none on the HTTP path (the rest is the Prisma and Nest CLIs). When the API raises a floor, raise it here too.
+
 ---
 
 ## 14. Important Historical Decisions
