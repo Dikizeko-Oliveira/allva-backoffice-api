@@ -1,4 +1,13 @@
-import { Request } from 'express';
+import { timingSafeEqual } from 'crypto';
+import type { NextFunction, Request, Response } from 'express';
+import { isIP } from 'net';
+
+/** IP do visitante, declarado pelo BFF (GAP-033). */
+export const CLIENT_IP_HEADER = 'x-allva-client-ip';
+/** Segredo que prova que quem declarou o IP é um proxy nosso. */
+export const PROXY_SECRET_HEADER = 'x-allva-proxy-secret';
+
+type RequestWithVerifiedIp = Request & { verifiedClientIp?: string };
 
 /**
  * The caller's IP, as far as this process is allowed to believe it.
@@ -15,6 +24,11 @@ import { Request } from 'express';
  * the login throttle was meant to provide.
  */
 export function resolveClientIp(req: Request): string | undefined {
+  // Declared by our own proxy and proven by the shared secret (GAP-033): wins
+  // over `req.ip`, which behind Vercel → Cloudflare is the Vercel egress.
+  const verified = (req as RequestWithVerifiedIp).verifiedClientIp;
+  if (verified) return verified;
+
   // Express already resolved this against `trust proxy`; when the app trusts no
   // proxy it is the socket address, which is the correct conservative answer.
   if (req.ip) return req.ip;
@@ -56,4 +70,55 @@ export function parseTrustProxySetting(
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+/**
+ * O IP do visitante que o **nosso** proxy declara (GAP-033, 2026-11-05).
+ *
+ * A cadeia de produção é navegador → Vercel (BFF) → Cloudflare → API, sem Nginx.
+ * O Cloudflare tem faixas publicadas; a saída da Vercel muda e não se lista. Com
+ * isso, `trust proxy` só oferecia duas respostas ruins:
+ *
+ * - confiar nas faixas do Cloudflare: todo usuário do app aparece com o IP de
+ *   saída da Vercel e divide o balde do throttle e o lockout;
+ * - confiar em dois saltos: qualquer um que chame `api.allva.com.br` direto
+ *   escreve o próprio `X-Forwarded-For` e escolhe o IP — throttle e lockout por
+ *   IP deixam de existir.
+ *
+ * A saída é o proxy **se identificar**: o BFF (e o backoffice-api) mandam o IP
+ * em `x-allva-client-ip` junto com `x-allva-proxy-secret`. O IP só é aceito se
+ * o segredo confere (comparação em tempo constante) e se é um IP válido. Os
+ * dois cabeçalhos saem da requisição aqui mesmo, aceitos ou não: o segredo não
+ * segue para log, auditoria nem controller.
+ *
+ * Sem `TRUSTED_CLIENT_IP_SECRET` configurado, nada muda — vale `req.ip`.
+ */
+export function verifiedClientIpMiddleware(secret: string | undefined) {
+  const expected = secret ? Buffer.from(secret) : null;
+
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    const declared = headerValue(req, CLIENT_IP_HEADER);
+    const presented = headerValue(req, PROXY_SECRET_HEADER);
+
+    delete req.headers[CLIENT_IP_HEADER];
+    delete req.headers[PROXY_SECRET_HEADER];
+
+    if (expected && declared && presented && isIP(declared)) {
+      const given = Buffer.from(presented);
+      if (
+        given.length === expected.length &&
+        timingSafeEqual(given, expected)
+      ) {
+        (req as RequestWithVerifiedIp).verifiedClientIp = declared;
+      }
+    }
+
+    next();
+  };
+}
+
+function headerValue(req: Request, name: string): string | undefined {
+  const raw = req.headers[name];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value?.trim() || undefined;
 }

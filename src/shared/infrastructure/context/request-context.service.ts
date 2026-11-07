@@ -8,6 +8,8 @@ export type RequestContextStore = {
    * backoffice-web to the calls this service makes to `allva-api`.
    */
   correlationId?: string;
+  /** O IP do operador, já resolvido (GAP-033), para repassar ao `allva-api`. */
+  clientIp?: string;
 };
 
 /**
@@ -29,5 +31,8 @@ export class RequestContextService {
   /** The correlation id of the current request, or undefined outside one. */
   getCorrelationId(): string | undefined {
     return this.storage.getStore()?.correlationId;
+  }
+  getClientIp(): string | undefined {
+    return this.storage.getStore()?.clientIp;
   }
 }

@@ -1,6 +1,7 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
+import { resolveClientIp } from 'src/shared/infrastructure/http/client-ip';
 import { RequestContextService } from './request-context.service';
 
 export const CORRELATION_ID_HEADER = 'x-correlation-id';
@@ -37,6 +38,11 @@ export class CorrelationIdMiddleware implements NestMiddleware {
     req.correlationId = correlationId;
     res.setHeader(CORRELATION_ID_HEADER, correlationId);
 
-    this.requestContext.run({ correlationId }, () => next());
+    // O IP vai junto (GAP-033): o cliente do `allva-api` o repassa, e ele só é
+    // o do operador se o painel o provou com o segredo.
+    this.requestContext.run(
+      { correlationId, clientIp: resolveClientIp(req) },
+      () => next(),
+    );
   }
 }

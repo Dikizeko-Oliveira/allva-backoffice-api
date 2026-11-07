@@ -5,7 +5,10 @@ import helmet from 'helmet';
 import { join } from 'path';
 
 import { CORRELATION_ID_HEADER } from './shared/infrastructure/context/correlation-id.middleware';
-import { parseTrustProxySetting } from './shared/infrastructure/http/client-ip';
+import {
+  parseTrustProxySetting,
+  verifiedClientIpMiddleware,
+} from './shared/infrastructure/http/client-ip';
 import { GlobalExceptionFilter } from './shared/infrastructure/http/filters/global-exception.filter';
 
 // Swagger UI / scalar serve inline scripts+styles, so the strict API CSP is
@@ -40,6 +43,9 @@ export function configureApp(app: NestExpressApplication): void {
    * addresses in production.
    */
   app.set('trust proxy', parseTrustProxySetting(process.env.TRUSTED_PROXIES));
+  // O IP do operador que o BFF do painel declara, provado por segredo
+  // (GAP-033) — o mesmo mecanismo do `allva-api`. Antes de tudo que lê IP.
+  app.use(verifiedClientIpMiddleware(process.env.TRUSTED_CLIENT_IP_SECRET));
 
   setupSecurityHeaders(app);
   setupCors(app);

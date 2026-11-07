@@ -22,6 +22,12 @@ export const envSchema = z.object({
   /** Origens extras de CORS (além de `FRONTEND_URL`), separadas por vírgula. */
   CORS_ALLOWED_ORIGINS: z.string().optional(),
   TRUSTED_PROXIES: z.string().optional(),
+  // Segredo compartilhado com o painel e o `allva-api` (GAP-033): aceita o IP
+  // em `x-allva-client-ip` como o do operador e o repassa ao `allva-api`.
+  TRUSTED_CLIENT_IP_SECRET: z
+    .string()
+    .min(32, 'TRUSTED_CLIENT_IP_SECRET must be at least 32 characters')
+    .optional(),
   DOCS_ENABLED: z.enum(['true', 'false']).optional(),
   /**
    * Por quanto tempo a introspecção de um token vale. O teto de 60s é regra de

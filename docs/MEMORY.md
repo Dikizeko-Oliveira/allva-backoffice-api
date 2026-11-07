@@ -142,6 +142,7 @@ NestJS 11 · TypeScript 5.9 · Prisma 7.3 (`prisma-client` generator → `genera
 - Product calls run **as the operator** (their bearer). This service has no credential of its own and never acts with more power than whoever clicked.
 - `X-Correlation-Id` is honoured (≤ 200 chars) or generated, and propagated to `allva-api`.
 - `TRUSTED_PROXIES` is a trust boundary: it decides the IP the audit records. Prefer the address list form in production.
+- `[DECISION]` (2026-11-05, GAP-033) **The operator's IP comes from the panel, proven by a shared secret, and is passed on to `allva-api`.** Production is Vercel (panel BFF) → Cloudflare → this service, so `req.ip` alone is a Vercel egress shared by everyone. `verifiedClientIpMiddleware` (same code as `allva-api`) accepts `x-allva-client-ip` only with `x-allva-proxy-secret` = `TRUSTED_CLIENT_IP_SECRET` and strips both; `AllvaApiClient` then forwards the resolved IP with the same secret, so the product audit records the operator instead of this service. Verified against a stub `allva-api`: right secret → the operator's IP; wrong secret → this service's view of the caller. `[VERIFY]` The panel (`allva-backoffice-web`) does not send the headers yet (GAP-053).
 - Docs (`/docs`, `/docs-json`, `/scalar`) are off in production unless `DOCS_ENABLED=true`. Strict CSP on the JSON surface; CORS allowlist enforced only in production.
 - Validation pipe is `whitelist` + `forbidNonWhitelisted`: unknown fields are a `400 VALIDATION_ERROR`.
 

@@ -45,10 +45,10 @@ export class AllvaApiClient {
   private readonly baseUrl: string;
 
   constructor(
-    env: EnvService,
+    private readonly env: EnvService,
     private readonly requestContext: RequestContextService,
   ) {
-    this.baseUrl = env.get('ALLVA_API_URL').replace(/\/$/, '');
+    this.baseUrl = this.env.get('ALLVA_API_URL').replace(/\/$/, '');
   }
 
   async request<T>(
@@ -66,6 +66,15 @@ export class AllvaApiClient {
     // o log do produto não diz qual clique no backoffice causou a chamada.
     const correlationId = this.requestContext.getCorrelationId();
     if (correlationId) headers[CORRELATION_ID_HEADER] = correlationId;
+
+    // O IP do operador, provado pelo segredo (GAP-033): sem isto a trilha do
+    // `allva-api` grava o IP deste serviço em toda ação feita pelo backoffice.
+    const clientIp = this.requestContext.getClientIp();
+    const secret = this.env.get('TRUSTED_CLIENT_IP_SECRET');
+    if (clientIp && secret) {
+      headers['x-allva-client-ip'] = clientIp;
+      headers['x-allva-proxy-secret'] = secret;
+    }
 
     if (options.body !== undefined) {
       headers['Content-Type'] = 'application/json';
