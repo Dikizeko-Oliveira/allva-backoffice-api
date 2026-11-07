@@ -5,6 +5,7 @@ import {
   CreateBackofficeAuditLogProps,
 } from 'src/modules/audit/domain/entities';
 import { BackofficeAuditLogsRepositoryInterface } from 'src/modules/audit/domain/ports';
+import { RequestContextService } from 'src/shared/infrastructure/context/request-context.service';
 
 export type RecordBackofficeAuditInput = Omit<
   CreateBackofficeAuditLogProps,
@@ -17,6 +18,14 @@ export type RecordBackofficeAuditInput = Omit<
  * Mesmo contrato do `AuditLogService` do `allva-api`: gravar a auditoria
  * **nunca** derruba a operação que ela descreve. Uma falha aqui é logada com o
  * que identifica a linha perdida, e a escrita do operador segue.
+ *
+ * ## A origem vem do contexto da requisição
+ *
+ * `ip` e `userAgent` saem do `RequestContextService` — o IP já resolvido pelo
+ * `CorrelationIdMiddleware` (provado pelo painel, GAP-033) — e não de cada use
+ * case. Antes, só a atribuição de chamado os passava, e as outras 15 escritas
+ * gravavam a origem vazia (GAP-046). Fora de uma requisição HTTP não há
+ * contexto, e as colunas ficam `null`, como devem.
  */
 @Injectable()
 export class BackofficeAuditLogService {
@@ -24,12 +33,19 @@ export class BackofficeAuditLogService {
 
   constructor(
     private readonly auditLogsRepository: BackofficeAuditLogsRepositoryInterface,
+    private readonly requestContext: RequestContextService,
   ) {}
 
   async record({ actor, ...input }: RecordBackofficeAuditInput): Promise<void> {
     try {
       await this.auditLogsRepository.save(
-        BackofficeAuditLog.create({ ...input, actorId: actor.id }),
+        BackofficeAuditLog.create({
+          ...input,
+          actorId: actor.id,
+          ip: input.ip ?? this.requestContext.getClientIp() ?? null,
+          userAgent:
+            input.userAgent ?? this.requestContext.getUserAgent() ?? null,
+        }),
       );
     } catch (error) {
       this.logger.error(

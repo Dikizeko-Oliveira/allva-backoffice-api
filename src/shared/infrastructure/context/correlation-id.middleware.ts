@@ -6,6 +6,9 @@ import { RequestContextService } from './request-context.service';
 
 export const CORRELATION_ID_HEADER = 'x-correlation-id';
 
+/** Um `User-Agent` legítimo cabe folgado; o resto é ruído na auditoria. */
+const MAX_USER_AGENT_LENGTH = 512;
+
 export type RequestWithCorrelation = Request & { correlationId?: string };
 
 /**
@@ -39,9 +42,15 @@ export class CorrelationIdMiddleware implements NestMiddleware {
     res.setHeader(CORRELATION_ID_HEADER, correlationId);
 
     // O IP vai junto (GAP-033): o cliente do `allva-api` o repassa, e ele só é
-    // o do operador se o painel o provou com o segredo.
+    // o do operador se o painel o provou com o segredo. IP e `User-Agent`
+    // também são o que a auditoria grava em toda escrita (GAP-046).
+    const userAgent = req.headers['user-agent']?.slice(
+      0,
+      MAX_USER_AGENT_LENGTH,
+    );
+
     this.requestContext.run(
-      { correlationId, clientIp: resolveClientIp(req) },
+      { correlationId, clientIp: resolveClientIp(req), userAgent },
       () => next(),
     );
   }

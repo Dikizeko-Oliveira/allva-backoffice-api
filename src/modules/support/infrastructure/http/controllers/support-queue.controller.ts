@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -6,7 +6,6 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
 import type { Operator } from 'src/modules/auth/domain/entities';
 import { CurrentOperator } from 'src/modules/auth/infrastructure/http/decorators/current-operator.decorator';
 import {
@@ -74,11 +73,7 @@ export class SupportQueueController {
     @CurrentOperator() operator: Operator,
     @Param('ticketId') ticketId: string,
     @Body() dto: AssignSupportTicketInputDto,
-    @Req() request: Request,
   ): Promise<SupportTicketOutputDto> {
-    return this.assignSupportTicketUseCase.execute(operator, ticketId, dto, {
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
-    });
+    return this.assignSupportTicketUseCase.execute(operator, ticketId, dto);
   }
 }

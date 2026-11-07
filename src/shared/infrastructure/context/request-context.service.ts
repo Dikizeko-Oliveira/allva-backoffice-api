@@ -10,6 +10,8 @@ export type RequestContextStore = {
   correlationId?: string;
   /** O IP do operador, já resolvido (GAP-033), para repassar ao `allva-api`. */
   clientIp?: string;
+  /** O `User-Agent` da requisição, para a trilha de auditoria (GAP-046). */
+  userAgent?: string;
 };
 
 /**
@@ -34,5 +36,9 @@ export class RequestContextService {
   }
   getClientIp(): string | undefined {
     return this.storage.getStore()?.clientIp;
+  }
+
+  getUserAgent(): string | undefined {
+    return this.storage.getStore()?.userAgent;
   }
 }

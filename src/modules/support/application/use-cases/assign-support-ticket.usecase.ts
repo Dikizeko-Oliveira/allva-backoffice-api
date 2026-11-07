@@ -10,11 +10,6 @@ import {
 import { AssignSupportTicketInputDto, SupportTicketOutputDto } from '../dtos';
 import { TicketSlaTrackerService } from '../services/ticket-sla-tracker.service';
 
-export type RequestOrigin = {
-  ip?: string | null;
-  userAgent?: string | null;
-};
-
 /**
  * Atribui (ou desatribui) um chamado.
  *
@@ -38,7 +33,6 @@ export class AssignSupportTicketUseCase {
     operator: Operator,
     ticketId: string,
     input: AssignSupportTicketInputDto,
-    origin: RequestOrigin = {},
   ): Promise<SupportTicketOutputDto> {
     assertPlatformPermission(operator, 'support:manage');
 
@@ -82,8 +76,6 @@ export class AssignSupportTicketUseCase {
       before: { assigneeId: fromOperatorId },
       after: { assigneeId: toOperatorId },
       reason,
-      ip: origin.ip,
-      userAgent: origin.userAgent,
     });
 
     return output;
